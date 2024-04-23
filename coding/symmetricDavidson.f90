@@ -1,7 +1,7 @@
 program davidson
   implicit none
   
-  real, allocatable :: matA(:,:), matV(:,:), diagonalA(:)
+  real, allocatable :: matA(:,:), matV(:,:), matW(:,:), diagonalA(:)
   integer :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(2)
   
   ndimA = 5
@@ -26,14 +26,16 @@ program davidson
 
 !get initial vector
   allocate(matV( ndimA, ndimV ))
-  
+
   idxMaxVal = maxloc(matA)
   matV(idxMaxVal(1), 1) = 1
   write(*,*) 'Initital Vector'
   call printMatrix(matV)
 
-  do it = 1, maxiter
-      
+  do it = 1, 1
+    matW = matmul(matA, matV)
+    write(*,*) 'Matrixproduct A V :'
+    call printMatrix(matW) 
   end do
   
 !output
