@@ -2,10 +2,13 @@ program davidson
     implicit none
     
     real, allocatable :: matA(:,:), matV(:,:) 
-    integer :: i, j, ndimA, ndimV
+    integer :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(2)
     
-!get matrix
     ndimA = 5
+    ndimV = 20
+    maxiter = 10
+
+!get matrix
     allocate(matA( ndimA, ndimA ))
 
     do i = 1, ndimA 
@@ -19,8 +22,19 @@ program davidson
         end do
     end do
 
-    allocate(matV( ndimV, ndimA ))
+!get initial vector
+    allocate(matV( ndimA, ndimV ))
     
+    idxMaxVal = maxloc(matA)
+    matV(idxMaxVal(1), 1) = 1
+    write(*,*) 'Initital Vector'
+    call printMatrix(matV)
+
+    do it = 1, maxiter
+        
+    end do
+    
+!output
     write(*,*) 'Input Matrix A:'
     call printMatrix(matA)
 
@@ -30,7 +44,7 @@ contains
     subroutine printMatrix(mat) 
         integer :: i
         real, allocatable :: mat(:,:)
-        do i = 1, size(mat(1,:))
+        do i = 1, size(mat(:,i))
             print *, mat(i, :)
         end do
     end subroutine printMatrix
