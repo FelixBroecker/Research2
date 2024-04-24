@@ -1,13 +1,16 @@
 program davidson
   implicit none
  
-  intrinsic :: selected_real_kind
-  integer, parameter :: wp = selected_real_kind(15)
-  real(wp), allocatable :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), work(:)
-  integer :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(2), lwork, info
-  
+  intrinsic              :: selected_real_kind
+  integer,  parameter    :: wp = selected_real_kind(15)
+  real(wp)               :: lw(1)
+  real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), work(:) 
+  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(2), lwork, info
+  real(wp), allocatable  :: ritzVector(:,:)
+  real(wp), allocatable  :: ritzVector2(:,:)
+
   ndimA = 5
-  ndimV = 20
+  ndimV = 6
   maxiter = 10
 
 !get matrix
@@ -25,6 +28,8 @@ program davidson
       end if
     end do
   end do
+  write(*,*) 'Input Matrix A:'
+  call printMatrix(matA)
 
 !get initial vector
   allocate(matV( ndimA, ndimV ))
@@ -49,26 +54,36 @@ program davidson
 
 !diagonalize 
   allocate(eigenvals(ndimV))
-  lwork = max(1, 3 * ndimV - 1)
+  call dsyev('V', 'U', ndimV, matP, ndimV, eigenvals, lw, -1, info)
+  lwork = int(lw(1))
   allocate(work(lwork))
+  !lwork = max(1, 3 * ndimV - 1)
   call dsyev('V', 'U', ndimV, matP, ndimV, eigenvals, work, lwork, info)
   write(*,*) 'Eigenvalues:', eigenvals
+  write(*,*) 'Matrix P'
+  call printMatrix(matP)
   
-!output
-  write(*,*) 'Input Matrix A:'
-  call printMatrix(matA)
+  
+!get ritz vector
+  write(*,*) 'Matrix V'
+  call printMatrix(matV)
+  write(6,*) 'before'
+  allocate(ritzVector2(ndimA,ndimV))
+!  allocate(ritzVector(ndimA,ndimV))
+  !call dgemv('n', ndimA, ndimV, 1.0d0, matV, ndimA, eigenvals, 1, 0.0d0, ritzVector, 1)
+  !write(*,*) 'Ritzvector'
+  !call printMatrix(ritzVector)
+  write(6,*) 'matrix', ritzVector 
 
+  contains
+    subroutine printMatrix(mat) 
+        integer :: i
+        real(wp), allocatable :: mat(:,:)
+        do i = 1, size(mat(:,i))
+          print *, mat(i, :)
+        end do
+    end subroutine printMatrix
+      
 
-
-contains
-  subroutine printMatrix(mat) 
-      integer :: i
-      real(wp), allocatable :: mat(:,:)
-      do i = 1, size(mat(:,i))
-        print *, mat(i, :)
-      end do
-  end subroutine printMatrix
-    
-
-end program davidson
-    
+  end program davidson
+      
