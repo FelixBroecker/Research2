@@ -5,7 +5,7 @@ program davidson
   integer,  parameter    :: wp = selected_real_kind(15)
   real(wp)               :: lw(1)
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
-  real(wp), allocatable  :: ritzVector(:,:), identity(:,:), temp(:,:), ritzVectorTemp(:), residual(:)
+  real(wp), allocatable  :: ritzVector(:,:), identity(:,:), temp(:,:), ritzVectorTemp(:), residual(:), identityVec(:), direction(:)
   integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(2), lwork, info
 
   ndimA = 5
@@ -74,13 +74,18 @@ program davidson
     call printMatrix(matV)
     allocate(ritzVector(ndimA,ndimV))
     call dgemm('n', 'n', ndimA, ndimV, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
-    write(*,*) 'Ritzvector'
+    write(*,*) 'Ritzvector all'
     call printMatrix(ritzVector)
   
   !get residual
     !get identity matrix and put eigenvalues on diagonal and substract from matA
     allocate(identity(ndimA, ndimA))
+    allocate(identityVec(ndimA))
     allocate(temp(ndimA, ndimA))
+    allocate(ritzVectorTemp(ndimA))
+    allocate(residual(ndimA))
+    allocate(direction(ndimA))
+
 
     !print *, maxloc(eigenvals)
     ! dot(eigenvals,  ritzvector)
@@ -91,13 +96,14 @@ program davidson
 
     identity(1:ndimA, 1:ndimA) = 0.0d0
     forall(i = 1:ndimA) identity(i, i) = 1.0d0
+    identityVec(1:ndimA) = 0.0d0
+    forall(i = 1:ndimA) identityVec(i) = 1.0d0
   
     do i = 0, it - 1
+
       !compute ritzvector for index i
-        allocate(ritzVectorTemp(ndimA))
-        allocate(residual(ndimA))
         call dgemv('n', ndimA, ndimV, 1.0d0, matV, ndimA, eigenvecs(:, size( eigenvecs(1,:) ) - i), 1, 0.0d0, ritzVectorTemp, 1)
-        print *, 'ritz Vector Temp'
+        print *, 'ritz Vector index i'
         print *, ritzVectorTemp
       !compute A - eigenval of index i * Identity
         temp = matA - eigenvals(size(eigenvals) - i) * identity
@@ -106,9 +112,11 @@ program davidson
       !dot Product of both
         call dgemv('n', ndimA, ndimA, 1.0d0, temp, ndimA, ritzVectorTemp, 1, 0.0d0, residual, 1)
         print *, 'Vector r_i', residual
-
-
-    !call printMatrix(identity) 
+      !get new directions tk
+        direction = eigenvals(size(eigenvals) - i) * identityVec - diagonalA
+        direction = residual / direction 
+        print *, 'direction', direction
+        
     enddo
     
   end do
