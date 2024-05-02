@@ -7,7 +7,7 @@ program davidson
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
   real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:)
-  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, counter
+  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx
   real(wp)               :: dnrm2
   logical                :: matrix_not_full
 
@@ -52,9 +52,9 @@ program davidson
   allocate(temp_mat(ndimV, eigen_in))
   allocate(temp_mat_prime(ndimA, eigen_in))
   allocate(ritzVectorTemp(ndimA))
-  allocate(residual(ndimA, ndimV))
+  allocate(residual(ndimA, eigen_in))
 
-counter = 1 
+idx = 0 
   do it = 1, maxiter
     call dgemm('n', 'n', ndimA, it * eigen_in, ndimA, 1.0d0, matA, ndimA, matV, ndimA, 0.0d0, matW, ndimA)
     write(*,*) 'Matrixproduct A V :'
@@ -74,6 +74,7 @@ counter = 1
     allocate(work(lwork))
     call dsyev('V', 'U', it, eigenvecs, it, eigenvals, work, lwork, info)
     deallocate(work)
+    print *, 'info', info
 
     write(*,*) 'Eigenvalues:', eigenvals
     write(*,*) 'Matrix P'
@@ -81,7 +82,7 @@ counter = 1
     write(6,*) 'eigenvecs'
     call printMatrix(eigenvecs)
       
-  ! get ritz vector with to matrices
+  ! get ritz vector 
     write(*,*) 'Matrix V'
     call printMatrix(matV)
     call dgemm('n', 'n', ndimA, it * eigen_in, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
@@ -91,8 +92,8 @@ counter = 1
   ! get residual
     ! go column wise and do residual = matW_i * eigenvectors_i * matV_i
 
-    do i = 1, it * eigen_in
-      residual(:,i) = matW(:,i) - eigenvals( it * i) * matV(:,i)
+    do i = 1, eigen_in
+      residual(:,i) = matW(:, idx + i) - eigenvals(idx + i) * matV(:, idx + i)
     end do
 
     print *, 'residual'
@@ -100,7 +101,7 @@ counter = 1
 
     ! compute norm
     print *, 'residual norm', dnrm2(ndimA, residual, 1)
-    if(dnrm2(ndimA, residual(:, it), 1) <= threshold_residual) then
+    if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
       print *, 'jippi, converged'
       exit 
     end if
@@ -108,16 +109,17 @@ counter = 1
     ! check if matrix is not full
     matrix_not_full = .true.
     do i = 1, ndimA
-      if (matV(ndimV, i) /= 0.0d0) then
+      if (matV(i, ndimV) /= 0.0d0) then
         matrix_not_full = .false.
         exit
       end if
     end do
+    print *, 'matrix not full', matrix_not_full
 
     if (matrix_not_full) then
 
       ! precondition 
-      do i = 1, it * eigen_in
+      do i = 1, eigen_in
         residual(:,i) = residual(:,i) / ( diagonalA(i) - eigenvals(i))
       end do
 
@@ -144,28 +146,29 @@ counter = 1
       call printMatrix(residual)
 
       ! orthonormalization
-        do i = 1, it * eigen_in
+        do i = 1, eigen_in
           residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
         end do
       write(*,*) 'orthonormalized precondition y'
       call printMatrix(residual)
       ! add to V subspace
       do i = 1, eigen_in
-        matV(:, counter + i ) = residual(:,i)
+        matV(:, idx + 1 + i) = residual(:,i)
       end do
       write(*,*) 'new subspace V'
       call printMatrix(matV)
       
     else
-      print *, ''
+      print *, 'Matrix V full'
       deallocate(matV)
       allocate(matV(ndimA, ndimV))
       do i = 1, eigen_in
-        matV(:, i) = ritzVector(:, counter + i - 1)
+        matV(:, i) = ritzVector(:, idx + i)
       end do
 
     end if
     
+  idx = idx + eigen_in
   end do
 
 
