@@ -3,17 +3,19 @@ program davidson
  
   intrinsic              :: selected_real_kind
   integer,  parameter    :: wp = selected_real_kind(15)
-  real(wp)               :: lw(1)
+  real(wp)               :: lw(1), threshold_residual
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
-  real(wp), allocatable  :: ritzVector(:,:), temp(:,:), ritzVectorTemp(:)
-  real(wp), allocatable  :: residual(:,:)
-  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in
+  real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
+  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:)
+  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, counter
   real(wp)               :: dnrm2
+  logical                :: matrix_not_full
 
   ndimA = 5
   ndimV = 6
-  maxiter = 10
+  maxiter = 2
   eigen_in = 1
+  threshold_residual = 0.001d0
 
 ! get matrix
   allocate(matA( ndimA, ndimA ))
@@ -47,11 +49,13 @@ program davidson
   allocate(eigenvals(ndimV))
   allocate(eigenvecs(ndimV, ndimV))
   allocate(ritzVector(ndimA,ndimV))
-  allocate(temp(ndimA, ndimA))
+  allocate(temp_mat(ndimV, eigen_in))
+  allocate(temp_mat_prime(ndimA, eigen_in))
   allocate(ritzVectorTemp(ndimA))
-  allocate(residual(ndimA, ndimA))
+  allocate(residual(ndimA, ndimV))
 
-  do it = 1, 1
+counter = 1 
+  do it = 1, maxiter
     call dgemm('n', 'n', ndimA, it * eigen_in, ndimA, 1.0d0, matA, ndimA, matV, ndimA, 0.0d0, matW, ndimA)
     write(*,*) 'Matrixproduct A V :'
     call printMatrix(matW)
@@ -69,6 +73,7 @@ program davidson
     lwork = int(lw(1))
     allocate(work(lwork))
     call dsyev('V', 'U', it, eigenvecs, it, eigenvals, work, lwork, info)
+    deallocate(work)
 
     write(*,*) 'Eigenvalues:', eigenvals
     write(*,*) 'Matrix P'
@@ -86,56 +91,80 @@ program davidson
   ! get residual
     ! go column wise and do residual = matW_i * eigenvectors_i * matV_i
 
-
-    !print *, maxloc(eigenvals)
-    ! dot(eigenvals,  ritzvector)
-    !call dgemv('n', ndimA, ndimV, 1.0d0, ritzVector, ndimA, eigenvals, 1, 0.0d0, temp, 1)
-    !call dgemm('n', 'n', ndimA, ndimV, ndimV, -1.0d0, matW, ndimA, eigenvals, ndimV, 1.0d0, temp, ndimA)
-    !print *, 'temp mat'
-    !call printMatrix(temp)
-  
-    do i = 1, eigen_in
+    do i = 1, it * eigen_in
       residual(:,i) = matW(:,i) - eigenvals( it * i) * matV(:,i)
-    enddo
-    print *, 'residual', residual
-    !do i = 1, n_search
-    !  res(:,i) = w(:,i) - lambda(it)*v(:,i)
-    !enddo
+    end do
+
+    print *, 'residual'
+    call printMatrix(residual)
 
     ! compute norm
-! if( conv)
+    print *, 'residual norm', dnrm2(ndimA, residual, 1)
+    if(dnrm2(ndimA, residual(:, it), 1) <= threshold_residual) then
+      print *, 'jippi, converged'
+      exit 
+    end if
+    
+    ! check if matrix is not full
+    matrix_not_full = .true.
+    do i = 1, ndimA
+      if (matV(ndimV, i) /= 0.0d0) then
+        matrix_not_full = .false.
+        exit
+      end if
+    end do
 
-! elseif (matV not full)
-    ! precondition
+    if (matrix_not_full) then
 
-    !do i = i, n_add (n_add = it*n_search)
-    !  res(:,i) = res(:,i) / (diag(i) - lambda(i))
-    !enddo
+      ! precondition 
+      do i = 1, it * eigen_in
+        residual(:,i) = residual(:,i) / ( diagonalA(i) - eigenvals(i))
+      end do
 
-    do i = 0, it - 1
+      print *, 'preconditioned residual'
+      call printMatrix(residual)
+      
+    ! Gram Schmit orthogonalization
 
-     ! !compute ritzvector for index i
-     !   call dgemv('n', ndimA, ndimV, 1.0d0, matV, ndimA, eigenvecs(:, size( eigenvecs(1,:) ) - i), 1, 0.0d0, ritzVectorTemp, 1)
-     !   print *, 'ritz Vector index i'
-     !   print *, ritzVectorTemp
-     ! !compute A - eigenval of index i * Identity
-     !   temp = matA - eigenvals(size(eigenvals) - i) * identity
-     !   print *, 'temp mat'
-     !   call printMatrix(temp)
-     ! !dot Product of both
-     !   call dgemv('n', ndimA, ndimA, 1.0d0, temp, ndimA, ritzVectorTemp, 1, 0.0d0, residual, 1)
-     !   print *, 'Vector r_i', residual
-     ! !get new directions tk
-     !   direction = eigenvals(size(eigenvals) - i) * identityVec - diagonalA
-     !   direction = residual / direction 
-     !   print *, 'direction', direction
-        
- !else
+      ! matrix product V^T * y  
+      call dgemm('t', 'n', ndimA, eigen_in * it, ndimA, 1.0d0, matV, ndimV, residual, ndimA, 0.0d0, temp_mat, ndimV)
+      write(*,*) 'matrix temp_mat'
+      call printMatrix(temp_mat)
 
-   !restart
+      ! matrix product V * (V^T * y) 
+      call dgemm('n', 'n', ndimA, eigen_in * it, ndimV, 1.0d0, matV, ndimV, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
+      write(*,*) 'matrix temp_mat_prime'
+      call printMatrix(temp_mat_prime)
 
- !endif
-    enddo
+      ! y_prime = y - temp_mat_prime
+      do i = 1, eigen_in
+        residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
+      end do
+      write(*,*) 'orthogonalized precondition y'
+      call printMatrix(residual)
+
+      ! orthonormalization
+        do i = 1, it * eigen_in
+          residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
+        end do
+      write(*,*) 'orthonormalized precondition y'
+      call printMatrix(residual)
+      ! add to V subspace
+      do i = 1, eigen_in
+        matV(:, counter + i ) = residual(:,i)
+      end do
+      write(*,*) 'new subspace V'
+      call printMatrix(matV)
+      
+    else
+      print *, ''
+      deallocate(matV)
+      allocate(matV(ndimA, ndimV))
+      do i = 1, eigen_in
+        matV(:, i) = ritzVector(:, counter + i - 1)
+      end do
+
+    end if
     
   end do
 
