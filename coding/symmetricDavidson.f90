@@ -6,7 +6,7 @@ program davidson
   real(wp)               :: lw(1), threshold_residual
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
-  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:)
+  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff
   integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx
   real(wp)               :: dnrm2
   logical                :: matrix_not_full, verbose
@@ -50,7 +50,7 @@ program davidson
 ! get initial vector
   allocate(matV( ndimA, ndimV ))
   ! search for colum with maximum value and use that column for initial vector
-  idxMaxVal = maxloc(diagonalA)
+  idxMaxVal = minloc(diagonalA)
   matV(idxMaxVal, 1) = 1
   write(*,*) 'Initital Vector'
   call printMatrix(matV)
@@ -114,8 +114,18 @@ program davidson
     if (matrix_not_full) then
     ! precondition y_i = r_i / (D - lambda_i)
       do i = 1, eigen_in
-        residual(:,i) = residual(:,i) / (diagonalA(i) - eigenvals(i))
+        do j = 1, ndimA
+          diff = diagonalA(j) - eigenvals(1)
+          if (diff >= 1.d-1) then
+            residual(j,i) = residual(j,i) / (diff)
+          else
+            residual(j,i) = 1.d-1
+          end if
+        print *, diff
+        end do
+        print *, residual 
       end do
+      
 
       print *
       print *, 'Preconditioned residual'
@@ -172,9 +182,6 @@ program davidson
       print *, 'Input Matrix A:'
       call printMatrix(matA)
       print *
-      print *, 'Matrix V'
-      call printMatrix(matV)
-      print *,
       print *, 'Matrixproduct W (A V) :'
       call printMatrix(matW)
       print *
