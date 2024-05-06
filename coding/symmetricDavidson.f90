@@ -6,18 +6,20 @@ program davidson
   real(wp)               :: lw(1), threshold_residual
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
-  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff
+  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
   integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx
   real(wp)               :: dnrm2
-  logical                :: matrix_not_full, verbose
+  logical, allocatable   :: mask(:)
+  logical                :: matrix_not_full, verbose, direct_GM
 
 
   ndimA                 = 5
   ndimV                 = 6
-  maxiter               = 2
+  maxiter               = 5
   eigen_in              = 1
-  threshold_residual    = 0.001d0
-  verbose               = .true.
+  threshold_residual    = 1.d-4
+  verbose               = .false.
+  direct_GM             = .true.
 
 
   allocate(matA( ndimA, ndimA ))
@@ -31,73 +33,118 @@ program davidson
   allocate(temp_mat_prime(ndimA, eigen_in))
   allocate(ritzVectorTemp(ndimA))
   allocate(residual(ndimA, eigen_in))
+  allocate(temp(ndimA, eigen_in))
+  allocate(mask(ndimA))
+  allocate(matV( ndimA, ndimV ))
 
 
 ! get matrix
   do i = 1, ndimA 
     do j = i, ndimA
       if (j == i) then
-        matA(i,j) = i + 1
+        matA(i,j) = i + 1.0d0
         diagonalA(i) = matA(i,j)
       else if (j > i) then
-        matA(i,j) = 1 / (dble(i + j))
+        matA(i,j) = 1.0d0 / (dble(i + j))
         matA(j,i) = matA(i,j)
       end if
     end do
   end do
 
+  write(*,*) 'Matrix A'
+  call printMatrix(matA)
+  print *
+
 
 ! get initial vector
-  allocate(matV( ndimA, ndimV ))
   ! search for colum with maximum value and use that column for initial vector
-  idxMaxVal = minloc(diagonalA)
-  matV(idxMaxVal, 1) = 1
+  matV = 0.0d0
+  mask = .true.
+
+  do i = 1, eigen_in
+    idxMaxVal = minloc(diagonalA, mask=mask)
+    matV(idxMaxVal, i) = 1.0d0
+    mask(idxMaxVal) = .false.
+  end do 
+
   write(*,*) 'Initital Vector'
   call printMatrix(matV)
+  print *
 
 
 ! start loop
   idx = 0 
-  do it = 1, maxiter
+  outer: do it = 1, maxiter
       print *, '------------------------------'
       print *, 'Iteration', it
       print *, '------------------------------'
 
+  eigenvecs = 0.0d0
+  eigenvals = 0.0d0
   ! get projection matrix P = (W)^T * V;  W = A * V
     call dgemm('n', 'n', ndimA, it * eigen_in, ndimA, 1.0d0, matA, ndimA, matV, ndimA, 0.0d0, matW, ndimA)
     call dgemm('t', 'n', ndimV, it * eigen_in, ndimA, 1.0d0, matW, ndimA, matV, ndimA, 0.0d0, matP, ndimV)
 
 
+    if (verbose) then
+      print *, 'Matrixproduct W (A V) :'
+      call printMatrix(matW)
+      print *
+      write(*,*) 'Matrixproduct (W)T V = P'
+      call printMatrix(matP)
+    end if
+
+
+
   ! diagonalize and obtain eigenvalues and eigenvectors 
     eigenvecs = matP
-    call dsyev('V', 'U', it, eigenvecs, it, eigenvals, lw, -1, info)
+    call dsyev('V', 'u', it, eigenvecs, ndimV, eigenvals, lw, -1, info)
     lwork = int(lw(1))
     allocate(work(lwork))
-    call dsyev('V', 'U', it, eigenvecs, it, eigenvals, work, lwork, info)
+    call dsyev('V', 'u', it, eigenvecs, ndimV, eigenvals, work, lwork, info)
     deallocate(work)
+
+    if (verbose) then
+      print *, 'Info about diagonalization (0 = worked)', info
+    end if
+
+      print *
+      print *, 'Eigenvalues:', eigenvals
+      print *, 'Eigenvectors:'
+      call printMatrix(eigenvecs)
 
 
   ! get ritz vector 
-    call dgemm('n', 'n', ndimA, it * eigen_in, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
+    call dgemm('n', 'n', ndimA, it, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
+
+    print *
+    print *, 'Ritzvector all'
+    call printMatrix(ritzVector)
+    print *
 
 
   ! get residual
-  ! go column wise and do residual = matW_i * eigenvectors_i * matV_i
+    call dgemm('n', 'n', ndimA, it * eigen_in, ndimV, 1.0d0, matW, ndimA, eigenvecs, ndimV, 0.0d0, residual, ndimA)
+
     do i = 1, eigen_in
-      residual(:,i) = matW(:, idx + i) - eigenvals(idx + i) * matV(:, idx + i)
+      call daxpy(ndimA, -eigenvals(i), ritzVector(:,i), 1, residual(:,i), 1)
     end do
 
-    print *
-    print *, 'Residual'
-    call printMatrix(residual)
+    if (verbose) then
+      print *
+      print *, 'Residual'
+      call printMatrix(residual)
+    end if
 
 
   ! compute norm and check convergency
-    print *, 'residual norm', dnrm2(ndimA, residual, 1)
+  do i = 1, eigen_in
+    print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
     if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
-      print *, 'jippi, converged'
-      exit 
+      print *, 'Converged for:', i
+      exit outer
     end if
+  end do
     
 
   ! check if matrix is not full
@@ -121,17 +168,36 @@ program davidson
           else
             residual(j,i) = 1.d-1
           end if
-        print *, diff
         end do
-        print *, residual 
       end do
-      
 
-      print *
-      print *, 'Preconditioned residual'
-      call printMatrix(residual)
 
-      
+  ! Gram Schmit orthogonalization
+
+    if (direct_GM) then
+
+      do i = 1, eigen_in
+        temp = 0.0d0
+        do j = 1, it
+          temp(:,i) = temp(:,i) + dot_product(residual(:,i), matV(:,j)) / dot_product(matV(:,j), matV(:,j)) * matV(:,j)
+        end do
+        residual(:,i) = residual(:,i) - temp(:,i)  
+        residual(:,i) = residual(:,i) / dnrm2(ndimA, residual(:,i), 1)
+      end do 
+
+      if (verbose) then
+        print *
+        print *, 'Check orthogonal condition'
+        do i = 1, eigen_in
+          print *, 'norm', i,  dnrm2(ndimA, residual(:,i), 1)
+          do j = 1, it 
+            print *, 'dot of Vectors eigen_in', i, 'index V:', j, dot_product( matV(:,j), residual(:,i)) 
+          end do
+        end do
+      end if
+
+    else
+
     ! Gram Schmidt orthogonalization
     ! matrix product V^T * y  
       call dgemm('t', 'n', ndimA, eigen_in * it, ndimA, 1.0d0, matV, ndimV, residual, ndimA, 0.0d0, temp_mat, ndimV)
@@ -147,7 +213,16 @@ program davidson
       print *, 'Orthogonalized precondition y'
       call printMatrix(residual)
 
-    ! orthonormalization
+
+      print *
+      print *, 'Check orthogonal condition'
+      do i = 1, it + 1
+        do j = 1, eigen_in
+          print *, 'to Vector', i, dot_product( matV(:,i), residual(:,j)) 
+        end do
+      end do
+
+    !  orthonormalization
       do i = 1, eigen_in
         residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
       end do
@@ -155,12 +230,34 @@ program davidson
       print *, 'Orthonormalized precondition y'
       call printMatrix(residual)
 
+      print *
+      print *, 'Check orthonormal condition:'
+      do i = 1, eigen_in
+        print *, dnrm2(ndimA, residual, 1)
+      end do
 
-    ! add to V subspace
+      print *, 'y_i: Matrix product V^T * y'
+      call printMatrix(temp_mat)
+      print *
+      print *, 'y_i: Matrix product V * ( V^T * y )'
+      call printMatrix(temp_mat_prime)
+
+    end if  
+
+    ! add orthonormal residual to subspace
+
       do i = 1, eigen_in
         matV(:, idx + 1 + i) = residual(:,i)
       end do
-      
+
+    if (verbose) then
+      print *
+      print *, 'New subspace V'
+      call printMatrix(matV)
+      print *
+      print *
+    end if 
+
 
     else
       print *, 'Matrix V full'
@@ -176,40 +273,7 @@ program davidson
     idx = idx + eigen_in
 
 
-! generate output
-    if (verbose) then
-      print *
-      print *, 'Input Matrix A:'
-      call printMatrix(matA)
-      print *
-      print *, 'Matrixproduct W (A V) :'
-      call printMatrix(matW)
-      print *
-      write(*,*) 'Matrixproduct (W)T V = P'
-      call printMatrix(matP)
-      print *, 'Info about diagonalization (0 = worked)', info
-      print *
-      print *, 'Eigenvalues:', eigenvals
-      print *, 'Eigenvectors:'
-      call printMatrix(eigenvecs)
-      print *
-      print *, 'Ritzvector all'
-      call printMatrix(ritzVector)
-      print *
-      print *, 'y_i: Matrix product V^T * y'
-      call printMatrix(temp_mat)
-      print *
-      print *, 'y_i: Matrix product V * ( V^T * y )'
-      call printMatrix(temp_mat_prime)
-      print *
-      print *, 'New subspace V'
-      call printMatrix(matV)
-      print *
-      print *
-
-    end if
-
-  end do
+  end do outer
 
 
   contains
