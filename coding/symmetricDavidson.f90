@@ -3,13 +3,13 @@ program davidson
  
   intrinsic              :: selected_real_kind
   integer,  parameter    :: wp = selected_real_kind(15)
-  real(wp)               :: lw(1), threshold_residual
+  real(wp)               :: lw(1), threshold_residual, zero
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
   real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
   integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx
   real(wp)               :: dnrm2
-  logical, allocatable   :: mask(:)
+  logical, allocatable   :: mask(:), converged(:)
   logical                :: matrix_not_full, verbose, direct_GM
 
 
@@ -19,8 +19,8 @@ program davidson
   eigen_in              = 1
   threshold_residual    = 1.d-4
   verbose               = .false.
-  direct_GM             = .true.
-
+  direct_GM             = .false.
+  zero                  = 0.0d0
 
   allocate(matA( ndimA, ndimA ))
   allocate(diagonalA(ndimA))
@@ -36,6 +36,24 @@ program davidson
   allocate(temp(ndimA, eigen_in))
   allocate(mask(ndimA))
   allocate(matV( ndimA, ndimV ))
+  allocate(converged(eigen_in))
+
+
+
+matA            = zero
+diagonalA       = zero
+matW            = zero
+matP            = zero
+eigenvals       = zero
+eigenvecs       = zero
+ritzVector      = zero
+temp_mat        = zero
+temp_mat_prime  = zero
+residual        = zero
+temp            = zero
+matV            = zero
+mask            = .true.
+converged       = .false.
 
 
 ! get matrix
@@ -58,8 +76,6 @@ program davidson
 
 ! get initial vector
   ! search for colum with maximum value and use that column for initial vector
-  matV = 0.0d0
-  mask = .true.
 
   do i = 1, eigen_in
     idxMaxVal = minloc(diagonalA, mask=mask)
@@ -142,6 +158,10 @@ program davidson
     print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
     if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
       print *, 'Converged for:', i
+      converged(i) = .true.
+    end if
+    if (all(converged)) then
+      print *, 'Converged for all sought eigenvalues.'
       exit outer
     end if
   end do
@@ -214,13 +234,14 @@ program davidson
       call printMatrix(residual)
 
 
-      print *
       print *, 'Check orthogonal condition'
-      do i = 1, it + 1
-        do j = 1, eigen_in
-          print *, 'to Vector', i, dot_product( matV(:,i), residual(:,j)) 
+      do i = 1, eigen_in
+        print *, 'norm', i,  dnrm2(ndimA, residual(:,i), 1)
+        do j = 1, it 
+          print *, 'dot of Vectors eigen_in', i, 'index V:', j, dot_product( matV(:,j), residual(:,i)) 
         end do
       end do
+        
 
     !  orthonormalization
       do i = 1, eigen_in
@@ -279,8 +300,8 @@ program davidson
   contains
     subroutine printMatrix(mat) 
         integer :: i, length
-        real(wp), allocatable :: mat(:,:)
-        length = size(mat(:,i))
+        real(wp), intent(in) :: mat(:,:)
+        length = size(mat(:,1))
         do i = 1, length
           print *, mat(i, :)
         end do
