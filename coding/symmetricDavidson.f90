@@ -3,24 +3,27 @@ program davidson
  
   intrinsic              :: selected_real_kind
   integer,  parameter    :: wp = selected_real_kind(15)
-  real(wp)               :: lw(1), threshold_residual, zero
+  real(wp)               :: lw(1), threshold_residual, zero, check_GS, thresh_GS
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
   real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
   integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx
   real(wp)               :: dnrm2
   logical, allocatable   :: mask(:), converged(:)
-  logical                :: matrix_not_full, verbose, direct_GM
+  logical                :: matrix_not_full, verbose, GS_in_loop
 
 
   ndimA                 = 5
   ndimV                 = 6
-  maxiter               = 5
+  maxiter               = 3
   eigen_in              = 1
   threshold_residual    = 1.d-4
   verbose               = .false.
-  direct_GM             = .false.
+  GS_in_loop            = .false.
+  thresh_GS             = 1.d-6
+
   zero                  = 0.0d0
+
 
   allocate(matA( ndimA, ndimA ))
   allocate(diagonalA(ndimA))
@@ -54,6 +57,7 @@ temp            = zero
 matV            = zero
 mask            = .true.
 converged       = .false.
+
 
 
 ! get matrix
@@ -194,8 +198,9 @@ converged       = .false.
 
   ! Gram Schmit orthogonalization
 
-    if (direct_GM) then
+    if (GS_in_loop) then
 
+    ! loop implementation
       do i = 1, eigen_in
         temp = 0.0d0
         do j = 1, it
@@ -205,40 +210,58 @@ converged       = .false.
         residual(:,i) = residual(:,i) / dnrm2(ndimA, residual(:,i), 1)
       end do 
 
-      if (verbose) then
-        print *
-        print *, 'Check orthogonal condition'
-        do i = 1, eigen_in
-          print *, 'norm', i,  dnrm2(ndimA, residual(:,i), 1)
-          do j = 1, it 
-            print *, 'dot of Vectors eigen_in', i, 'index V:', j, dot_product( matV(:,j), residual(:,i)) 
-          end do
+    ! check if orthonormal
+      do i = 1, eigen_in
+        do j = 1, it 
+          check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
+          if ( check_GS .GT. thresh_GS ) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
+            print *, 'Result of dot product:', check_GS
+            print *
+          end if
         end do
-      end if
+      end do
 
     else
 
-    ! Gram Schmidt orthogonalization
+    ! matrix implementation
+
     ! matrix product V^T * y  
-      call dgemm('t', 'n', ndimA, eigen_in * it, ndimA, 1.0d0, matV, ndimV, residual, ndimA, 0.0d0, temp_mat, ndimV)
+      call dgemm('t', 'n',  it * eigen_in, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
 
     ! matrix product V * (V^T * y) 
-      call dgemm('n', 'n', ndimA, eigen_in * it, ndimV, 1.0d0, matV, ndimV, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
+      call dgemm('n', 'n', ndimA, eigen_in, it * eigen_in, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
 
     ! y_prime = y - V * (V^T * y) 
       do i = 1, eigen_in
         residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
       end do
-      print *
-      print *, 'Orthogonalized precondition y'
-      call printMatrix(residual)
 
 
-      print *, 'Check orthogonal condition'
+      if (verbose) then
+        print *, 'y_i: Matrix product V^T * y'
+        call printMatrix(temp_mat)
+        print *
+        print *, 'y_i: Matrix product V * ( V^T * y )'
+        call printMatrix(temp_mat_prime)
+        print *
+        print *, 'Orthogonalized precondition y'
+        call printMatrix(residual)
+      end if
+
+
       do i = 1, eigen_in
-        print *, 'norm', i,  dnrm2(ndimA, residual(:,i), 1)
         do j = 1, it 
-          print *, 'dot of Vectors eigen_in', i, 'index V:', j, dot_product( matV(:,j), residual(:,i)) 
+          check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
+          if ( check_GS .GT. thresh_GS ) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
+            print *, 'Result of dot product:', check_GS
+            print *
+          end if
         end do
       end do
         
@@ -257,19 +280,14 @@ converged       = .false.
         print *, dnrm2(ndimA, residual, 1)
       end do
 
-      print *, 'y_i: Matrix product V^T * y'
-      call printMatrix(temp_mat)
-      print *
-      print *, 'y_i: Matrix product V * ( V^T * y )'
-      call printMatrix(temp_mat_prime)
 
     end if  
 
     ! add orthonormal residual to subspace
 
-      do i = 1, eigen_in
-        matV(:, idx + 1 + i) = residual(:,i)
-      end do
+    do i = 1, eigen_in
+      matV(:, idx + 1 + i) = residual(:,i)
+    end do
 
     if (verbose) then
       print *
