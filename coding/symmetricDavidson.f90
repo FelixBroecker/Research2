@@ -15,7 +15,7 @@ program davidson
 
   ndimA                 = 5
   ndimV                 = 6
-  maxiter               = 3
+  maxiter               = 6
   eigen_in              = 1
   threshold_residual    = 1.d-4
   verbose               = .false.
@@ -87,12 +87,12 @@ converged       = .false.
     mask(idxMaxVal) = .false.
   end do 
 
-  write(*,*) 'Initital Vector'
+  write(*,*) 'Initial Vector'
   call printMatrix(matV)
   print *
 
 
-  idx = 0 
+  idx = 1
   n_grow = eigen_in
 
 ! start loop
@@ -120,10 +120,10 @@ converged       = .false.
 
   ! diagonalize and obtain eigenvalues and eigenvectors 
     eigenvecs = matP
-    call dsyev('V', 'u', it, eigenvecs, ndimV, eigenvals, lw, -1, info)
+    call dsyev('V', 'u', idx, eigenvecs, ndimV, eigenvals, lw, -1, info)
     lwork = int(lw(1))
     allocate(work(lwork))
-    call dsyev('V', 'u', it, eigenvecs, ndimV, eigenvals, work, lwork, info)
+    call dsyev('V', 'u', idx, eigenvecs, ndimV, eigenvals, work, lwork, info)
     deallocate(work)
 
     if (verbose) then
@@ -137,7 +137,7 @@ converged       = .false.
 
 
   ! get ritz vector 
-    call dgemm('n', 'n', ndimA, it, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
+    call dgemm('n', 'n', ndimA, idx, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
 
     print *
     print *, 'Ritzvector all'
@@ -177,7 +177,6 @@ converged       = .false.
     matrix_not_full = .true.
     do i = 1, ndimA
       if (matV(i, ndimV) /= 0.0d0) then
-        print *, 'Matrix is full'
         matrix_not_full = .false.   
         exit
       end if
@@ -200,119 +199,136 @@ converged       = .false.
 
   ! Gram Schmit orthogonalization
 
-    if (GS_in_loop) then
+      if (GS_in_loop) then
 
-    ! loop implementation
-      do i = 1, eigen_in
-        temp = 0.0d0
-        do j = 1, it
-          temp(:,i) = temp(:,i) + dot_product(residual(:,i), matV(:,j)) / dot_product(matV(:,j), matV(:,j)) * matV(:,j)
+  ! loop implementation
+        do i = 1, eigen_in
+          temp = 0.0d0
+          do j = 1, idx
+            temp(:,i) = temp(:,i) + dot_product(residual(:,i), matV(:,j)) / dot_product(matV(:,j), matV(:,j)) * matV(:,j)
+          end do
+          residual(:,i) = residual(:,i) - temp(:,i)  
+          residual(:,i) = residual(:,i) / dnrm2(ndimA, residual(:,i), 1)
+        end do 
+
+      ! check if orthonormal
+        do i = 1, eigen_in
+          do j = 1, idx
+            check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
+            if ( check_GS .GT. thresh_GS ) then
+              print *
+              print *, '--- WARNING ---'
+              print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
+              print *, 'Result of dot product:', check_GS
+              print *
+            end if
+          end do
         end do
-        residual(:,i) = residual(:,i) - temp(:,i)  
-        residual(:,i) = residual(:,i) / dnrm2(ndimA, residual(:,i), 1)
-      end do 
 
-    ! check if orthonormal
-      do i = 1, eigen_in
-        do j = 1, it 
-          check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
-          if ( check_GS .GT. thresh_GS ) then
-            print *
-            print *, '--- WARNING ---'
-            print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
-            print *, 'Result of dot product:', check_GS
-            print *
-          end if
+      else
+
+  ! matrix implementation
+
+      ! matrix product V^T * y  
+        call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
+
+      ! matrix product V * (V^T * y) 
+        call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
+
+      ! y_prime = y - V * (V^T * y) 
+        do i = 1, eigen_in
+          residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
         end do
-      end do
-
-    else
-
-    ! matrix implementation
-
-    ! matrix product V^T * y  
-      call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
-
-    ! matrix product V * (V^T * y) 
-      call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
-
-    ! y_prime = y - V * (V^T * y) 
-      do i = 1, eigen_in
-        residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
-      end do
 
 
-      if (verbose) then
-        print *, 'y_i: Matrix product V^T * y'
-        call printMatrix(temp_mat)
-        print *
-        print *, 'y_i: Matrix product V * ( V^T * y )'
-        call printMatrix(temp_mat_prime)
-        print *
-        print *, 'Orthogonalized precondition y'
-        call printMatrix(residual)
-      end if
+        if (verbose) then
+          print *, 'y_i: Matrix product V^T * y'
+          call printMatrix(temp_mat)
+          print *
+          print *, 'y_i: Matrix product V * ( V^T * y )'
+          call printMatrix(temp_mat_prime)
+          print *
+          print *, 'Orthogonalized precondition y'
+          call printMatrix(residual)
+        end if
 
 
-      do i = 1, eigen_in
-        do j = 1, it 
-          check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
-          if ( check_GS .GT. thresh_GS ) then
-            print *
-            print *, '--- WARNING ---'
-            print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
-            print *, 'Result of dot product:', check_GS
-            print *
-          end if
+        do i = 1, eigen_in
+          do j = 1, idx
+            check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
+            if ( check_GS .GT. thresh_GS ) then
+              print *
+              print *, '--- WARNING ---'
+              print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
+              print *, 'Result of dot product:', check_GS
+              print *
+            end if
+          end do
         end do
-      end do
-        
+          
 
     !  orthonormalization
+        do i = 1, eigen_in
+          residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
+        end do
+        print *
+        print *, 'Orthonormalized precondition y'
+        call printMatrix(residual)
+
+        print *
+
+      end if  
+
+      ! add orthonormal residual to subspace
+
       do i = 1, eigen_in
-        residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
+        matV(:, idx  + i) = residual(:,i)
       end do
-      print *
-      print *, 'Orthonormalized precondition y'
-      call printMatrix(residual)
 
-      print *
-      print *, 'Check orthonormal condition:'
+      if (verbose) then
+        print *
+        print *, 'New subspace V'
+        call printMatrix(matV)
+        print *
+        print *
+      end if 
+
+    ! restart 
+      idx = idx + eigen_in
+      n_grow = n_grow + eigen_in 
+
+
+    else
+    ! treat case if matrix full
+      print *, 'Matrix V full'
+      matV            = zero
+
       do i = 1, eigen_in
-        print *, dnrm2(ndimA, residual, 1)
+        matV(:, i) = ritzVector(:, idx - 1 + i)
       end do
 
-
-    end if  
-
-    ! add orthonormal residual to subspace
-
-    do i = 1, eigen_in
-      matV(:, idx + 1 + i) = residual(:,i)
-    end do
-
-    if (verbose) then
-      print *
-      print *, 'New subspace V'
+      print *, 'New subspace'
       call printMatrix(matV)
       print *
       print *
-    end if 
 
+    ! restart
 
-    else
-      print *, 'Matrix V full'
-      deallocate(matV)
-      allocate(matV(ndimA, ndimV))
+      matW            = zero
+      matP            = zero
+      eigenvals       = zero
+      eigenvecs       = zero
+      ritzVector      = zero
+      temp_mat        = zero
+      temp_mat_prime  = zero
+      residual        = zero
+      temp            = zero
 
-      do i = 1, eigen_in
-        matV(:, i) = ritzVector(:, idx + i)
-      end do
-
+      idx             = 1
+      n_grow          = eigen_in
+    
     end if
 
-    idx = idx + eigen_in
-    n_grow = n_grow + eigen_in 
 
 
   end do outer
