@@ -3,7 +3,7 @@ program davidson
  
   intrinsic              :: selected_real_kind
   integer,  parameter    :: wp = selected_real_kind(15)
-  real(wp)               :: lw(1), threshold_residual, zero, check_GS, thresh_GS
+  real(wp)               :: lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
   real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
   real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
@@ -14,9 +14,9 @@ program davidson
 
 
   ndimA                 = 5
-  ndimV                 = 6
-  maxiter               = 6
-  eigen_in              = 1
+  ndimV                 = 10
+  maxiter               = 5
+  eigen_in              = 2
   threshold_residual    = 1.d-4
   verbose               = .false.
   GS_in_loop            = .false.
@@ -91,8 +91,7 @@ converged       = .false.
   call printMatrix(matV)
   print *
 
-
-  idx = 1
+  idx = eigen_in
   n_grow = eigen_in
 
 ! start loop
@@ -101,8 +100,8 @@ converged       = .false.
       print *, 'Iteration', it
       print *, '------------------------------'
 
-  eigenvecs = 0.0d0
-  eigenvals = 0.0d0
+    eigenvecs = 0.0d0
+    eigenvals = 0.0d0
   ! get projection matrix P = (W)^T * V;  W = A * V
     call dgemm('n', 'n', ndimA, n_grow, ndimA, 1.0d0, matA, ndimA, matV, ndimA, 0.0d0, matW, ndimA)
     call dgemm('t', 'n', ndimV, n_grow, ndimA, 1.0d0, matW, ndimA, matV, ndimA, 0.0d0, matP, ndimV)
@@ -146,8 +145,7 @@ converged       = .false.
 
 
   ! get residual
-    call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matW, ndimA, eigenvecs, ndimV, 0.0d0, residual, ndimA)
-
+    call dgemm('n', 'n', ndimA, eigen_in, ndimV, 1.0d0, matW, ndimA, eigenvecs, ndimV, 0.0d0, residual, ndimA)
     do i = 1, eigen_in
       call daxpy(ndimA, -eigenvals(i), ritzVector(:,i), 1, residual(:,i), 1)
     end do
@@ -167,11 +165,12 @@ converged       = .false.
       converged(i) = .true.
     end if
     if (all(converged)) then
-      print *, 'Converged for all sought eigenvalues.'
+      print *, 'Converged for all sought eigenpairs.'
       exit outer
     end if
   end do
     
+
 
   ! check if matrix is not full
     matrix_not_full = .true.
@@ -196,8 +195,39 @@ converged       = .false.
         end do
       end do
 
+      
+  ! for eigen_in > 1 orthogonalize residual matrix
+    if (eigen_in .GT. 1) then
 
-  ! Gram Schmit orthogonalization
+      call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
+      lwork = int(lw(1))
+      allocate(work(lwork))
+      call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
+      call checkInfo(info, 'Orthogonalization of residual step 1')
+
+
+      call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
+      call checkInfo(info, 'Orthogonalization of residual step 2')
+      deallocate(work)
+
+      do i = 1, eigen_in
+        do j = 1, eigen_in
+          if (j .NE. i) then
+            check_GS = abs(dot_product( residual(:,j), residual(:,i) ))
+          end if
+          if ( check_GS .GT. thresh_GS ) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'residual vector of index', i, 'is not orthogonal to residual vector', j, 'in matrix V'
+            print *, 'Result of dot product:', check_GS
+            print *
+          end if
+        end do
+      end do
+    end if
+
+
+  ! Gram Schmidt orthogonalization
 
       if (GS_in_loop) then
 
@@ -336,14 +366,28 @@ converged       = .false.
 
   contains
     subroutine printMatrix(mat) 
-        integer :: i, length
-        real(wp), intent(in) :: mat(:,:)
-        length = size(mat(:,1))
-        do i = 1, length
-          print *, mat(i, :)
-        end do
+      integer :: i, length
+      real(wp), intent(in) :: mat(:,:)
+      length = size(mat(:,1))
+      do i = 1, length
+        print *, mat(i, :)
+      end do
     end subroutine printMatrix
-      
+
+
+    subroutine checkInfo(info, occasion)
+      integer               :: info, zero
+      character(len=20)     :: occasion
+
+      zero = 0
+      if (info .NE. zero) then
+        print *, '--- WARNING ---'
+        print *, occasion
+        print *, 'Process terminated with info /= 0'
+      end if
+
+    end subroutine
+
 
   end program davidson
       
