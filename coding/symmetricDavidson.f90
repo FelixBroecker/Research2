@@ -14,11 +14,11 @@ program davidson
 
 
   ndimA                 = 5
-  ndimV                 = 10
-  maxiter               = 5
-  eigen_in              = 2
+  ndimV                 = 5
+  maxiter               = 3
+  eigen_in              = 1
   threshold_residual    = 1.d-4
-  verbose               = .false.
+  verbose               = .true.
   GS_in_loop            = .false.
   thresh_GS             = 1.d-6
 
@@ -74,9 +74,8 @@ converged       = .false.
   end do
 
   write(*,*) 'Matrix A'
-  call printMatrix(matA)
+  call printMatrix(matA, ndimA, ndimA)
   print *
-
 
 ! get initial vector
   ! search for colum with maximum value and use that column for initial vector
@@ -88,7 +87,7 @@ converged       = .false.
   end do 
 
   write(*,*) 'Initial Vector'
-  call printMatrix(matV)
+  call printMatrix(matV, eigen_in, ndimA)
   print *
 
   idx = eigen_in
@@ -99,6 +98,7 @@ converged       = .false.
       print *, '------------------------------'
       print *, 'Iteration', it
       print *, '------------------------------'
+      print *
 
     eigenvecs = 0.0d0
     eigenvals = 0.0d0
@@ -109,10 +109,10 @@ converged       = .false.
 
     if (verbose) then
       print *, 'Matrixproduct W (A V) :'
-      call printMatrix(matW)
+      call printMatrix(matW, n_grow, ndimA)
       print *
       write(*,*) 'Matrixproduct (W)T V = P'
-      call printMatrix(matP)
+      call printMatrix(matP, n_grow, n_grow)
     end if
 
 
@@ -125,14 +125,12 @@ converged       = .false.
     call dsyev('V', 'u', idx, eigenvecs, ndimV, eigenvals, work, lwork, info)
     deallocate(work)
 
-    if (verbose) then
-      print *, 'Info about diagonalization (0 = worked)', info
-    end if
-
-      print *
-      print *, 'Eigenvalues:', eigenvals
-      print *, 'Eigenvectors:'
-      call printMatrix(eigenvecs)
+    print *
+    print *, 'Eigenvalues:'
+    call printVector(eigenvals, n_grow)
+    print *
+    print *, 'Eigenvectors:'
+    call printMatrix(eigenvecs, n_grow, n_grow)
 
 
   ! get ritz vector 
@@ -140,7 +138,7 @@ converged       = .false.
 
     print *
     print *, 'Ritzvector all'
-    call printMatrix(ritzVector)
+    call printMatrix(ritzVector, n_grow, ndimA)
     print *
 
 
@@ -153,22 +151,24 @@ converged       = .false.
     if (verbose) then
       print *
       print *, 'Residual'
-      call printMatrix(residual)
+      call printMatrix(residual, eigen_in, ndimA)
+      print *
     end if
 
 
   ! compute norm and check convergency
-  do i = 1, eigen_in
-    print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
-    if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
-      print *, 'Converged for:', i
-      converged(i) = .true.
-    end if
-    if (all(converged)) then
-      print *, 'Converged for all sought eigenpairs.'
-      exit outer
-    end if
-  end do
+    do i = 1, eigen_in
+      print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
+      print *
+      if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
+        print *, 'Converged for:', i
+        converged(i) = .true.
+      end if
+      if (all(converged)) then
+        print *, 'Converged for all sought eigenpairs.'
+        exit outer
+      end if
+    end do
     
 
 
@@ -197,6 +197,7 @@ converged       = .false.
 
       
   ! for eigen_in > 1 orthogonalize residual matrix
+
     if (eigen_in .GT. 1) then
 
       call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
@@ -210,6 +211,7 @@ converged       = .false.
       call checkInfo(info, 'Orthogonalization of residual step 2')
       deallocate(work)
 
+      call checkOrth1mat(residual, eigen_in, 'Residual', thresh_GS)
       do i = 1, eigen_in
         do j = 1, eigen_in
           if (j .NE. i) then
@@ -241,19 +243,8 @@ converged       = .false.
           residual(:,i) = residual(:,i) / dnrm2(ndimA, residual(:,i), 1)
         end do 
 
-      ! check if orthonormal
-        do i = 1, eigen_in
-          do j = 1, idx
-            check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
-            if ( check_GS .GT. thresh_GS ) then
-              print *
-              print *, '--- WARNING ---'
-              print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
-              print *, 'Result of dot product:', check_GS
-              print *
-            end if
-          end do
-        end do
+      ! print a warning if matrix is not orthogonal
+          call checkOrth2mat(residual, eigen_in, 'Residual', matV, idx, 'Matrix V', thresh_GS)
 
       else
 
@@ -273,28 +264,18 @@ converged       = .false.
 
         if (verbose) then
           print *, 'y_i: Matrix product V^T * y'
-          call printMatrix(temp_mat)
+          call printMatrix(temp_mat, eigen_in, n_grow)
           print *
           print *, 'y_i: Matrix product V * ( V^T * y )'
-          call printMatrix(temp_mat_prime)
+          call printMatrix(temp_mat_prime, eigen_in, ndimA)
           print *
           print *, 'Orthogonalized precondition y'
-          call printMatrix(residual)
+          call printMatrix(residual, eigen_in, ndimA)
         end if
 
 
-        do i = 1, eigen_in
-          do j = 1, idx
-            check_GS = abs(dot_product( matV(:,j), residual(:,i) ))
-            if ( check_GS .GT. thresh_GS ) then
-              print *
-              print *, '--- WARNING ---'
-              print *, 'precondition of index', i, 'is not orthogonal to vector', j, 'in matrix V'
-              print *, 'Result of dot product:', check_GS
-              print *
-            end if
-          end do
-        end do
+    ! print a warning if matrix is not orthogonal
+        call checkOrth2mat(residual, eigen_in, 'Residual', matV, idx, 'Matrix V', thresh_GS)
           
 
     !  orthonormalization
@@ -303,7 +284,7 @@ converged       = .false.
         end do
         print *
         print *, 'Orthonormalized precondition y'
-        call printMatrix(residual)
+        call printMatrix(residual, eigen_in, ndimA)
 
         print *
 
@@ -318,7 +299,7 @@ converged       = .false.
       if (verbose) then
         print *
         print *, 'New subspace V'
-        call printMatrix(matV)
+        call printMatrix(matV, n_grow + eigen_in, ndimA)
         print *
         print *
       end if 
@@ -338,7 +319,7 @@ converged       = .false.
       end do
 
       print *, 'New subspace'
-      call printMatrix(matV)
+      call printMatrix(matV, eigen_in, ndimA)
       print *
       print *
 
@@ -365,29 +346,95 @@ converged       = .false.
 
 
   contains
-    subroutine printMatrix(mat) 
-      integer :: i, length
-      real(wp), intent(in) :: mat(:,:)
-      length = size(mat(:,1))
-      do i = 1, length
-        print *, mat(i, :)
+!   print formatted matrix
+    subroutine printMatrix(mat, nrows, ncols) 
+
+      real(wp), intent(in)  :: mat(:,:)
+      integer , intent(in)  :: nrows, ncols
+      integer :: i
+
+      do i = 1, ncols
+        print *, (mat(i,j), j= 1, nrows )
       end do
+
     end subroutine printMatrix
 
 
-    subroutine checkInfo(info, occasion)
-      integer               :: info, zero
-      character(len=20)     :: occasion
+    subroutine printVector(vec, lenRow)
 
-      zero = 0
-      if (info .NE. zero) then
-        print *, '--- WARNING ---'
-        print *, occasion
-        print *, 'Process terminated with info /= 0'
-      end if
+      real(wp), intent(in)  :: vec(:)
+      integer,  intent(in)  :: lenRow
+      integer               :: i
+
+      do i = 1, lenRow
+        print *, vec(i)
+      end do
 
     end subroutine
 
 
+!   check if info is zero and print error message if not
+    subroutine checkInfo(info, occasion)
+      integer               :: info, zero
+      character(len=40)     :: occasion
+
+      zero = 0
+      if (info .NE. zero) then
+        print *
+        print *, '--- WARNING ---'
+        print *, occasion
+        print *, 'Process terminated with info not equal to 0'
+        print*
+      end if
+    end subroutine
+
+
+
+!   check if vectors of two matrices are orthogonal
+    subroutine checkOrth2mat(mat1, nrows1, mat1_name, mat2, nrows2, mat2_name, thresh)
+      integer,              intent(in)      ::  nrows1, nrows2
+      real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
+      character(len=20),    intent(in)      ::  mat1_name, mat2_name
+      real(wp)                              ::  dot_prod
+
+      do i = 1, nrows1
+        do j = 1, nrows2
+          dot_prod = abs(dot_product( mat2(:,j), mat1(:,i) ))
+          if ( dot_prod .GT. thresh ) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'vector', i, 'of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat2_name
+            print *, 'Result of dot product:', dot_prod
+            print *
+          end if
+        end do
+      end do
+    end subroutine
+
+
+!   check if the vectors within the matrix are orthogonal
+    subroutine checkOrth1mat(mat1, nrows1, mat1_name, thresh)
+
+      integer,              intent(in)      ::  nrows1
+      real(wp),             intent(in)      ::  thresh, mat1(:,:)
+      character(len=20),    intent(in)      ::  mat1_name
+      real(wp)                              ::  dot_prod
+
+      do i = 1, nrows1
+        do j = 1, nrows1
+          if (j .NE. i) then
+            dot_prod  = abs(dot_product( mat1(:,j), mat1(:,i) ))
+          end if
+          if ( dot_prod .GT. thresh ) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'vector', i, 'of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat1_name
+            print *, 'Result of dot product:', dot_prod
+            print *
+          end if
+        end do
+      end do
+
+    end subroutine
   end program davidson
       
