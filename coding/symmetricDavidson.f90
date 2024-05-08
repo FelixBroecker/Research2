@@ -14,18 +14,17 @@ program davidson
 
 
   ndimA                 = 5
-  ndimV                 = 8
+  ndimV                 = 4
   maxiter               = 6
-  eigen_in              = 1
+  eigen_in              = 2
   threshold_residual    = 1.d-4
-  verbose               = .false.
+  verbose               = .true.
   GS_in_loop            = .false.
   thresh_GS             = 1.d-6
 
 
-
-  allocate(matA( ndimA, ndimA ))
-  allocate(diagonalA(ndimA))
+! allocate matrices to obtain reduced space
+  allocate(matA( ndimA, ndimA ), diagonalA(ndimA))
   allocate(matW(ndimA, ndimV))
   allocate(matP(ndimV, ndimV))
   allocate(eigenvals(ndimV))
@@ -119,10 +118,10 @@ program davidson
 
   ! diagonalize and obtain eigenvalues and eigenvectors 
     eigenvecs = matP
-    call dsyev('V', 'u', idx, eigenvecs, ndimV, eigenvals, lw, -1, info)
+    call dsyev('V', 'u', n_grow, eigenvecs, ndimV, eigenvals, lw, -1, info)
     lwork = int(lw(1))
     allocate(work(lwork))
-    call dsyev('V', 'u', idx, eigenvecs, ndimV, eigenvals, work, lwork, info)
+    call dsyev('V', 'u', n_grow, eigenvecs, ndimV, eigenvals, work, lwork, info)
     deallocate(work)
 
     print *
@@ -134,7 +133,7 @@ program davidson
 
 
   ! get ritz vector 
-    call dgemm('n', 'n', ndimA, idx, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
+    call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
 
     print *
     print *, 'Ritzvector all'
@@ -293,7 +292,7 @@ program davidson
       ! add orthonormal residual to subspace
 
       do i = 1, eigen_in
-        matV(:, idx  + i) = residual(:,i)
+        matV(:, n_grow  + i) = residual(:,i)
       end do
 
       if (verbose) then
@@ -315,7 +314,7 @@ program davidson
       matV            = zero
 
       do i = 1, eigen_in
-        matV(:, i) = ritzVector(:, idx - eigen_in + i)
+        matV(:, i) = ritzVector(:, i)
       end do
 
       print *, 'New subspace'
@@ -376,7 +375,7 @@ program davidson
 !   check if info is zero and print error message if not
     subroutine checkInfo(info, occasion)
       integer               :: info, zero
-      character(len=40)     :: occasion
+      character(len=*)     :: occasion
 
       zero = 0
       if (info .NE. zero) then
@@ -394,7 +393,7 @@ program davidson
     subroutine checkOrth2mat(mat1, nrows1, mat1_name, mat2, nrows2, mat2_name, thresh)
       integer,              intent(in)      ::  nrows1, nrows2
       real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
-      character(len=20),    intent(in)      ::  mat1_name, mat2_name
+      character(len=*),    intent(in)      ::  mat1_name, mat2_name
       real(wp)                              ::  dot_prod
 
       do i = 1, nrows1
@@ -417,7 +416,7 @@ program davidson
 
       integer,              intent(in)      ::  nrows1
       real(wp),             intent(in)      ::  thresh, mat1(:,:)
-      character(len=20),    intent(in)      ::  mat1_name
+      character(len=*),    intent(in)      ::  mat1_name
       real(wp)                              ::  dot_prod
 
       do i = 1, nrows1
