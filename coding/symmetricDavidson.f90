@@ -14,15 +14,14 @@ program davidson
 
 
   ndimA                 = 5
-  ndimV                 = 5
-  maxiter               = 3
+  ndimV                 = 8
+  maxiter               = 6
   eigen_in              = 1
   threshold_residual    = 1.d-4
-  verbose               = .true.
+  verbose               = .false.
   GS_in_loop            = .false.
   thresh_GS             = 1.d-6
 
-  zero                  = 0.0d0
 
 
   allocate(matA( ndimA, ndimA ))
@@ -42,21 +41,22 @@ program davidson
   allocate(converged(eigen_in))
 
 
-
-matA            = zero
-diagonalA       = zero
-matW            = zero
-matP            = zero
-eigenvals       = zero
-eigenvecs       = zero
-ritzVector      = zero
-temp_mat        = zero
-temp_mat_prime  = zero
-residual        = zero
-temp            = zero
-matV            = zero
-mask            = .true.
-converged       = .false.
+  zero                  = 0.0d0
+  
+  matA            = zero
+  diagonalA       = zero
+  matW            = zero
+  matP            = zero
+  eigenvals       = zero
+  eigenvecs       = zero
+  ritzVector      = zero
+  temp_mat        = zero
+  temp_mat_prime  = zero
+  residual        = zero
+  temp            = zero
+  matV            = zero
+  mask            = .true.
+  converged       = .false.
 
 
 
@@ -175,7 +175,7 @@ converged       = .false.
   ! check if matrix is not full
     matrix_not_full = .true.
     do i = 1, ndimA
-      if (matV(i, ndimV) /= 0.0d0) then
+      if (matV(i, ndimV + 1 - eigen_in) /= 0.0d0) then
         matrix_not_full = .false.   
         exit
       end if
@@ -315,7 +315,7 @@ converged       = .false.
       matV            = zero
 
       do i = 1, eigen_in
-        matV(:, i) = ritzVector(:, idx - 1 + i)
+        matV(:, i) = ritzVector(:, idx - eigen_in + i)
       end do
 
       print *, 'New subspace'
