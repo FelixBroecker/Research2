@@ -5,6 +5,60 @@ program davidson
 
   intrinsic                 ::  selected_real_kind
   integer,  parameter       ::  wp = selected_real_kind(15)
+  real(wp)                  ::  start_david, end_david, start_lapack, end_lapack, zero
+  real(wp), allocatable     ::  eigenvecs(:,:), mat(:,:), diagonal(:), eigenvals(:)
+  integer                   ::  i, j, ndim
+
+
+  ndim = 5
+
+
+  allocate(mat(ndim, ndim), diagonal(ndim), eigenvecs(ndim, ndim), eigenvals(ndim))
+  zero = 0.0d0
+  mat = zero 
+  diagonal = zero
+  eigenvecs = zero
+
+! get matrix
+  do i = 1, ndim
+    do j = i, ndim
+      if (j == i) then
+        mat(i,j) = i + 1.0d0
+        diagonal(i) = mat(i,j)
+      else if (j > i) then
+        mat(i,j) = 1.0d0 / (dble(i + j))
+        mat(j,i) = mat(i,j)
+      end if
+    end do
+  end do
+
+  print *, 'matrix A'
+  call printMatrix(mat, ndim, ndim)
+
+
+  call cpu_time(start_david)
+  call symmetricDavidson()
+  call cpu_time(end_david)
+
+  print *
+  print *, 'Results Lapack'
+  call cpu_time(start_lapack)
+  eigenvecs = mat
+  call lapackDiag(eigenvecs, eigenvals, ndim)
+  print *, 'eigenvals'
+  call printVector(eigenvals, ndim)
+  call cpu_time(end_lapack)
+  
+
+  print*
+  print*, '------------------------------------------'
+  print * , 'overall wall time Davidson', end_david - start_david, 's'
+  print * , 'overall wall time Lapack', end_lapack - start_lapack, 's'
+
+
+contains
+  subroutine symmetricDavidson()
+
   real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
   real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
@@ -19,9 +73,9 @@ program davidson
   ndimA                 = 5
   ndimV                 = 4
   maxiter               = 6
-  eigen_in              = 2
+  eigen_in              = 1
   threshold_residual    = 1.d-4
-  verbose               = .true.
+  verbose               = .false.
   GS_in_loop            = .false.
   thresh_GS             = 1.d-6
 
@@ -348,21 +402,44 @@ program davidson
 
 
   end do outer
+  print *, 'test'
+  deallocate(matA, mask, diagonalA, matV, matW, matP, eigenvals, eigenvecs, &
+             ritzVector, residual, ritzVectorTemp, temp_mat, temp_mat_prime, temp, converged)
+  print *, 'test'
+
+  end subroutine symmetricDavidson
 
 
-  contains
+  subroutine lapackDiag(mat, eigenvals, ndimMat)
+    real(wp),   intent(inout)     :: mat(:,:)
+    real(wp),   intent(out)       :: eigenvals(:)
+    integer,    intent(in)        :: ndimMat
+    real(wp)                      :: lw(1)
+    real(wp), allocatable         :: work(:)
+    integer                       :: lwork, info
+
+
+    call dsyev('V', 'u', ndimMat, mat, ndimMat, eigenvals, lw, -1, info)
+    lwork = int(lw(1))
+    allocate(work(lwork))
+    call dsyev('V', 'u', ndimMat, mat, ndimMat, eigenvals, work, lwork, info)
+    call checkInfo(info, 'diagonalize whole mat A')
+    deallocate(work)
+  end subroutine lapackDiag
+
+
 !   print formatted matrix
-    subroutine printMatrix(mat, nrows, ncols) 
+  subroutine printMatrix(mat, nrows, ncols) 
 
-      real(wp), intent(in)  :: mat(:,:)
-      integer , intent(in)  :: nrows, ncols
-      integer :: i
+    real(wp), intent(in)  :: mat(:,:)
+    integer , intent(in)  :: nrows, ncols
+    integer :: i,j 
 
-      do i = 1, ncols
-        print *, (mat(i,j), j= 1, nrows )
-      end do
+    do i = 1, ncols
+      print *, (mat(i,j), j= 1, nrows )
+    end do
 
-    end subroutine printMatrix
+  end subroutine printMatrix
 
 
     subroutine printVector(vec, lenRow)
@@ -375,7 +452,7 @@ program davidson
         print *, vec(i)
       end do
 
-    end subroutine
+    end subroutine printVector
 
 
 !   check if info is zero and print error message if not
@@ -391,7 +468,7 @@ program davidson
         print *, 'Process terminated with info not equal to 0'
         print*
       end if
-    end subroutine
+    end subroutine checkInfo
 
 
 
@@ -401,6 +478,7 @@ program davidson
       real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
       character(len=*),    intent(in)      ::  mat1_name, mat2_name
       real(wp)                              ::  dot_prod
+      integer :: i,j 
 
       do i = 1, nrows1
         do j = 1, nrows2
@@ -414,7 +492,7 @@ program davidson
           end if
         end do
       end do
-    end subroutine
+    end subroutine checkOrth2mat
 
 
 !   check if the vectors within the matrix are orthogonal
@@ -422,8 +500,9 @@ program davidson
 
       integer,              intent(in)      ::  nrows1
       real(wp),             intent(in)      ::  thresh, mat1(:,:)
-      character(len=*),    intent(in)      ::  mat1_name
+      character(len=*),    intent(in)       ::  mat1_name
       real(wp)                              ::  dot_prod
+      integer :: i,j 
 
       do i = 1, nrows1
         do j = 1, nrows1
@@ -440,6 +519,7 @@ program davidson
         end do
       end do
 
-    end subroutine
+    end subroutine checkOrth1mat
+ 
   end program davidson
       
