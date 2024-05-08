@@ -1,16 +1,19 @@
 program davidson
+
   implicit none
  
-  intrinsic              :: selected_real_kind
-  integer,  parameter    :: wp = selected_real_kind(15)
-  real(wp)               :: lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
-  real(wp), allocatable  :: matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
-  real(wp), allocatable  :: ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
-  real(wp), allocatable  :: residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
-  integer                :: i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in, idx, n_grow
-  real(wp)               :: dnrm2
-  logical, allocatable   :: mask(:), converged(:)
-  logical                :: matrix_not_full, verbose, GS_in_loop
+
+  intrinsic                 ::  selected_real_kind
+  integer,  parameter       ::  wp = selected_real_kind(15)
+  real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
+  real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
+  real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
+  real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
+  integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in,  n_grow
+  real(wp)                  ::  dnrm2
+  logical, allocatable      ::  mask(:), converged(:)
+  logical                   ::  matrix_not_full, verbose, GS_in_loop
+
 
 
   ndimA                 = 5
@@ -23,21 +26,26 @@ program davidson
   thresh_GS             = 1.d-6
 
 
-! allocate matrices to obtain reduced space
-  allocate(matA( ndimA, ndimA ), diagonalA(ndimA))
-  allocate(matW(ndimA, ndimV))
-  allocate(matP(ndimV, ndimV))
-  allocate(eigenvals(ndimV))
-  allocate(eigenvecs(ndimV, ndimV))
-  allocate(ritzVector(ndimA,ndimV))
-  allocate(temp_mat(ndimV, eigen_in))
-  allocate(temp_mat_prime(ndimA, eigen_in))
+
+! allocate space to create matrix A
+  allocate(matA( ndimA, ndimA ), mask(ndimA), diagonalA(ndimA))
+
+! allocate space to obtain reduced space
+  allocate(matV( ndimA, ndimV ), matW(ndimA, ndimV), matP(ndimV, ndimV))
+
+! allocate space for diagonalization
+  allocate(eigenvals(ndimV), eigenvecs(ndimV, ndimV))
+
+! allocate space for ritz vector and residual
+  allocate(ritzVector(ndimA,ndimV), residual(ndimA, eigen_in))
   allocate(ritzVectorTemp(ndimA))
-  allocate(residual(ndimA, eigen_in))
-  allocate(temp(ndimA, eigen_in))
-  allocate(mask(ndimA))
-  allocate(matV( ndimA, ndimV ))
+
+! allocate space for diagonalization
+  allocate(temp_mat(ndimV, eigen_in), temp_mat_prime(ndimA, eigen_in), temp(ndimA, eigen_in))
+
+! allocate space for else
   allocate(converged(eigen_in))
+
 
 
   zero                  = 0.0d0
@@ -76,6 +84,7 @@ program davidson
   call printMatrix(matA, ndimA, ndimA)
   print *
 
+
 ! get initial vector
   ! search for colum with maximum value and use that column for initial vector
 
@@ -89,7 +98,6 @@ program davidson
   call printMatrix(matV, eigen_in, ndimA)
   print *
 
-  idx = eigen_in
   n_grow = eigen_in
 
 ! start loop
@@ -235,7 +243,7 @@ program davidson
   ! loop implementation
         do i = 1, eigen_in
           temp = 0.0d0
-          do j = 1, idx
+          do j = 1, n_grow
             temp(:,i) = temp(:,i) + dot_product(residual(:,i), matV(:,j)) / dot_product(matV(:,j), matV(:,j)) * matV(:,j)
           end do
           residual(:,i) = residual(:,i) - temp(:,i)  
@@ -243,7 +251,7 @@ program davidson
         end do 
 
       ! print a warning if matrix is not orthogonal
-          call checkOrth2mat(residual, eigen_in, 'Residual', matV, idx, 'Matrix V', thresh_GS)
+          call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS)
 
       else
 
@@ -274,7 +282,7 @@ program davidson
 
 
     ! print a warning if matrix is not orthogonal
-        call checkOrth2mat(residual, eigen_in, 'Residual', matV, idx, 'Matrix V', thresh_GS)
+        call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS)
           
 
     !  orthonormalization
@@ -304,7 +312,6 @@ program davidson
       end if 
 
     ! restart 
-      idx = idx + eigen_in
       n_grow = n_grow + eigen_in 
 
 
@@ -334,7 +341,6 @@ program davidson
       residual        = zero
       temp            = zero
 
-      idx             = 1
       n_grow          = eigen_in
     
     end if
