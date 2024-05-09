@@ -5,30 +5,121 @@ program davidson
 
   intrinsic                 ::  selected_real_kind
   integer,  parameter       ::  wp = selected_real_kind(15)
+  real(wp)                  ::  start_david, end_david, start_lapack, end_lapack, zero
+  real(wp), allocatable     ::  mat(:,:), diagonal(:), eigenvals_lap(:), eigenvecs_lap(:,:), eigenvals_dav(:), eigenvecs_dav(:,:)
+  integer                   ::  i, j, ndim, eigen_in, verbose
+
+
+  ndim = 5
+  eigen_in = 1
+  verbose = 1
+  
+! allocate space for matrix
+  allocate(mat(ndim, ndim), diagonal(ndim),)
+! allocate space for eigenvecs and eigenvals
+  allocate(eigenvecs_lap(ndim, ndim), eigenvals_lap(ndim), eigenvecs_dav(eigen_in, eigen_in), eigenvals_dav(eigen_in))
+
+
+  zero = 0.0d0
+  mat = zero 
+  diagonal = zero
+  eigenvecs_lap = zero
+  eigenvals_lap = zero
+
+
+! get matrix
+  do i = 1, ndim
+    do j = i, ndim
+      if (j == i) then
+        mat(i,j) = i + 1.0d0
+        diagonal(i) = mat(i,j)
+      else if (j > i) then
+        mat(i,j) = 1.0d0 / (dble(i + j))
+        mat(j,i) = mat(i,j)
+      end if
+    end do
+  end do
+
+  print *, '----------------'
+  print *, 'Input Matrix A'
+  print *, '----------------'
+  print *
+  call printMatrix(mat, ndim, ndim)
+  print *
+
+  print *
+  print *, '----------------'
+  print *, 'Results Davidson'
+  print *, '----------------'
+
+  call cpu_time(start_david)
+  call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose)
+  call cpu_time(end_david)
+  
+  print *
+  print *, 'Eigenvalues:'
+  print *
+  call printVector(eigenvals_dav, eigen_in)
+  print *
+  print *, 'Eigenvectors'
+  print *
+  print *, eigenvecs_dav
+  !call printMatrix(eigenvecs_dav, ndim, ndim)
+
+  eigenvecs_lap = mat
+  call cpu_time(start_lapack)
+  call lapackDiag(eigenvecs_lap, eigenvals_lap, ndim)
+  call cpu_time(end_lapack)
+
+  print *
+  print *, '----------------'
+  print *, 'Results Lapack'
+  print *, '----------------'
+  print *
+  print *, 'Eigenvalues:'
+  print *
+  call printVector(eigenvals_lap, ndim)
+  print *
+  print *, 'Eigenvectors'
+  print *
+  call printMatrix(eigenvecs_lap, ndim, ndim)
+  
+  
+
+  print*
+  print*, '------------------------------------------'
+  print * , 'overall wall time Davidson', end_david - start_david, 's'
+  print * , 'overall wall time Lapack', end_lapack - start_lapack, 's'
+
+
+contains
+  subroutine symmetricDavidson(mat_in, dim_mat_in, return_eigenvecs, return_eigenvals, eigen_in, verbose)
+
+  real(wp), intent(in)      ::  mat_in(:,:)
+  real(wp), intent(out)     ::  return_eigenvecs(:,:), return_eigenvals(:)
+  integer, intent(in)       ::  dim_mat_in, eigen_in, verbose
   real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
   real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
   real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
-  integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in,  n_grow
+  integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow
   real(wp)                  ::  dnrm2
   logical, allocatable      ::  mask(:), converged(:)
-  logical                   ::  matrix_not_full, verbose, GS_in_loop
+  logical                   ::  matrix_not_full, GS_in_loop
 
 
 
-  ndimA                 = 5
+  ndimA                 = dim_mat_in
   ndimV                 = 4
   maxiter               = 6
-  eigen_in              = 2
   threshold_residual    = 1.d-4
-  verbose               = .true.
   GS_in_loop            = .false.
   thresh_GS             = 1.d-6
 
 
 
 ! allocate space to create matrix A
-  allocate(matA( ndimA, ndimA ), mask(ndimA), diagonalA(ndimA))
+  allocate(matA( dim_mat_in, ndimA ), mask(ndimA), diagonalA(ndimA))
 
 ! allocate space to obtain reduced space
   allocate(matV( ndimA, ndimV ), matW(ndimA, ndimV), matP(ndimV, ndimV))
@@ -67,23 +158,23 @@ program davidson
 
 
 
-! get matrix
-  do i = 1, ndimA 
-    do j = i, ndimA
-      if (j == i) then
-        matA(i,j) = i + 1.0d0
-        diagonalA(i) = matA(i,j)
-      else if (j > i) then
-        matA(i,j) = 1.0d0 / (dble(i + j))
-        matA(j,i) = matA(i,j)
+!get matrix diagonal
+  do i = 1, dim_mat_in
+    do j = i, dim_mat_in
+      if (j .eq. i ) then
+        diagonalA(i) = mat_in(i,j)
       end if
     end do
   end do
 
-  write(*,*) 'Matrix A'
-  call printMatrix(matA, ndimA, ndimA)
-  print *
+  matA = mat_in
 
+
+  if (verbose .ge. 2) then
+    write(*,*) 'Matrix A'
+    call printMatrix(matA, ndimA, ndimA)
+    print *
+  end if
 
 ! get initial vector
   ! search for colum with maximum value and use that column for initial vector
@@ -94,18 +185,22 @@ program davidson
     mask(idxMaxVal) = .false.
   end do 
 
-  write(*,*) 'Initial Vector'
-  call printMatrix(matV, eigen_in, ndimA)
-  print *
+  if (verbose .ge. 2) then
+    write(*,*) 'Initial Vector'
+    call printMatrix(matV, eigen_in, ndimA)
+    print *
+  end if
 
   n_grow = eigen_in
 
 ! start loop
   outer: do it = 1, maxiter
+    if (verbose .ge. 2) then
       print *, '------------------------------'
       print *, 'Iteration', it
       print *, '------------------------------'
       print *
+    end if
 
     eigenvecs = 0.0d0
     eigenvals = 0.0d0
@@ -114,7 +209,7 @@ program davidson
     call dgemm('t', 'n', ndimV, n_grow, ndimA, 1.0d0, matW, ndimA, matV, ndimA, 0.0d0, matP, ndimV)
 
 
-    if (verbose) then
+    if (verbose .ge. 3) then
       print *, 'Matrixproduct W (A V) :'
       call printMatrix(matW, n_grow, ndimA)
       print *
@@ -132,22 +227,24 @@ program davidson
     call dsyev('V', 'u', n_grow, eigenvecs, ndimV, eigenvals, work, lwork, info)
     deallocate(work)
 
-    print *
-    print *, 'Eigenvalues:'
-    call printVector(eigenvals, n_grow)
-    print *
-    print *, 'Eigenvectors:'
-    call printMatrix(eigenvecs, n_grow, n_grow)
-
+    if (verbose .ge. 2) then
+      print *
+      print *, 'Eigenvalues:'
+      call printVector(eigenvals, n_grow)
+      print *
+      print *, 'Eigenvectors:'
+      call printMatrix(eigenvecs, n_grow, n_grow)
+    end if
 
   ! get ritz vector 
     call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
 
-    print *
-    print *, 'Ritzvector all'
-    call printMatrix(ritzVector, n_grow, ndimA)
-    print *
-
+    if (verbose .ge. 2) then
+      print *
+      print *, 'Ritzvector all'
+      call printMatrix(ritzVector, n_grow, ndimA)
+      print *
+    end if
 
   ! get residual
     call dgemm('n', 'n', ndimA, eigen_in, ndimV, 1.0d0, matW, ndimA, eigenvecs, ndimV, 0.0d0, residual, ndimA)
@@ -155,7 +252,7 @@ program davidson
       call daxpy(ndimA, -eigenvals(i), ritzVector(:,i), 1, residual(:,i), 1)
     end do
 
-    if (verbose) then
+    if (verbose .ge. 3) then
       print *
       print *, 'Residual'
       call printMatrix(residual, eigen_in, ndimA)
@@ -165,17 +262,42 @@ program davidson
 
   ! compute norm and check convergency
     do i = 1, eigen_in
-      print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
-      print *
+      if (verbose .ge. 2) then
+        print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
+        print *
+      end if
       if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
-        print *, 'Converged for:', i
+        if (verbose .ge. 2) then
+          print *, 'Converged for:', i
+        end if
         converged(i) = .true.
       end if
-      if (all(converged)) then
-        print *, 'Converged for all sought eigenpairs.'
+    end do
+
+    if (all(converged)) then
+        if (verbose .ge. 1) then
+          print *, 'Converged for all sought eigenpairs after', it, 'iterations.'
+          print *
+          print *, 'Eigenvalues:'
+          print *
+          call printVector(eigenvals, eigen_in)
+          print *
+          print *, 'Eigenvectors:'
+          print *
+          call printMatrix(eigenvecs, eigen_in, n_grow)
+          print *
+        end if
+
+    ! copy eigenpairs in output
+        do i = 1, eigen_in 
+          return_eigenvals = eigenvals(i)
+          do j = 1, eigen_in
+            return_eigenvecs = eigenvecs(i, j)
+          end do
+        end do
+
         exit outer
       end if
-    end do
     
 
 
@@ -219,20 +341,6 @@ program davidson
       deallocate(work)
 
       call checkOrth1mat(residual, eigen_in, 'Residual', thresh_GS)
-      do i = 1, eigen_in
-        do j = 1, eigen_in
-          if (j .NE. i) then
-            check_GS = abs(dot_product( residual(:,j), residual(:,i) ))
-          end if
-          if ( check_GS .GT. thresh_GS ) then
-            print *
-            print *, '--- WARNING ---'
-            print *, 'residual vector of index', i, 'is not orthogonal to residual vector', j, 'in matrix V'
-            print *, 'Result of dot product:', check_GS
-            print *
-          end if
-        end do
-      end do
     end if
 
 
@@ -269,7 +377,7 @@ program davidson
         end do
 
 
-        if (verbose) then
+        if (verbose .ge. 3) then
           print *, 'y_i: Matrix product V^T * y'
           call printMatrix(temp_mat, eigen_in, n_grow)
           print *
@@ -289,11 +397,11 @@ program davidson
         do i = 1, eigen_in
           residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
         end do
-        print *
-        print *, 'Orthonormalized precondition y'
-        call printMatrix(residual, eigen_in, ndimA)
-
-        print *
+        if (verbose .ge. 2) then
+          print *
+          print *, 'Orthonormalized precondition y'
+          call printMatrix(residual, eigen_in, ndimA)
+        end if
 
       end if  
 
@@ -303,7 +411,7 @@ program davidson
         matV(:, n_grow  + i) = residual(:,i)
       end do
 
-      if (verbose) then
+      if (verbose .ge. 3) then
         print *
         print *, 'New subspace V'
         call printMatrix(matV, n_grow + eigen_in, ndimA)
@@ -314,6 +422,14 @@ program davidson
     ! restart 
       n_grow = n_grow + eigen_in 
 
+      if (it .eq. maxiter) then
+        if (verbose .ge. 1) then
+          print *
+          print *, 'Not converged after', it, 'iterations'
+        end if
+        return_eigenvecs = zero
+        return_eigenvals = zero
+      end if
 
     else
     ! treat case if matrix full
@@ -324,10 +440,12 @@ program davidson
         matV(:, i) = ritzVector(:, i)
       end do
 
-      print *, 'New subspace'
-      call printMatrix(matV, eigen_in, ndimA)
-      print *
-      print *
+      if (verbose .ge. 2) then
+        print *, 'New subspace'
+        call printMatrix(matV, eigen_in, ndimA)
+        print *
+        print *
+      end if
 
     ! restart
 
@@ -348,21 +466,43 @@ program davidson
 
 
   end do outer
+  deallocate(matA, mask, diagonalA, matV, matW, matP, eigenvals, eigenvecs, &
+             ritzVector, residual, ritzVectorTemp, temp_mat, temp_mat_prime, temp, converged)
 
 
-  contains
+  end subroutine symmetricDavidson
+
+
+  subroutine lapackDiag(mat, eigenvals, ndimMat)
+    real(wp),   intent(inout)     :: mat(:,:)
+    real(wp),   intent(out)       :: eigenvals(:)
+    integer,    intent(in)        :: ndimMat
+    real(wp)                      :: lw(1)
+    real(wp), allocatable         :: work(:)
+    integer                       :: lwork, info
+
+
+    call dsyev('V', 'u', ndimMat, mat, ndimMat, eigenvals, lw, -1, info)
+    lwork = int(lw(1))
+    allocate(work(lwork))
+    call dsyev('V', 'u', ndimMat, mat, ndimMat, eigenvals, work, lwork, info)
+    call checkInfo(info, 'diagonalize whole mat A')
+    deallocate(work)
+  end subroutine lapackDiag
+
+
 !   print formatted matrix
-    subroutine printMatrix(mat, nrows, ncols) 
+  subroutine printMatrix(mat, nrows, ncols) 
 
-      real(wp), intent(in)  :: mat(:,:)
-      integer , intent(in)  :: nrows, ncols
-      integer :: i
+    real(wp), intent(in)  :: mat(:,:)
+    integer , intent(in)  :: nrows, ncols
+    integer :: i,j 
 
-      do i = 1, ncols
-        print *, (mat(i,j), j= 1, nrows )
-      end do
+    do i = 1, ncols
+      print *, (mat(i,j), j= 1, nrows )
+    end do
 
-    end subroutine printMatrix
+  end subroutine printMatrix
 
 
     subroutine printVector(vec, lenRow)
@@ -375,7 +515,7 @@ program davidson
         print *, vec(i)
       end do
 
-    end subroutine
+    end subroutine printVector
 
 
 !   check if info is zero and print error message if not
@@ -391,7 +531,7 @@ program davidson
         print *, 'Process terminated with info not equal to 0'
         print*
       end if
-    end subroutine
+    end subroutine checkInfo
 
 
 
@@ -401,6 +541,7 @@ program davidson
       real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
       character(len=*),    intent(in)      ::  mat1_name, mat2_name
       real(wp)                              ::  dot_prod
+      integer :: i,j 
 
       do i = 1, nrows1
         do j = 1, nrows2
@@ -414,7 +555,7 @@ program davidson
           end if
         end do
       end do
-    end subroutine
+    end subroutine checkOrth2mat
 
 
 !   check if the vectors within the matrix are orthogonal
@@ -422,8 +563,9 @@ program davidson
 
       integer,              intent(in)      ::  nrows1
       real(wp),             intent(in)      ::  thresh, mat1(:,:)
-      character(len=*),    intent(in)      ::  mat1_name
+      character(len=*),    intent(in)       ::  mat1_name
       real(wp)                              ::  dot_prod
+      integer :: i,j 
 
       do i = 1, nrows1
         do j = 1, nrows1
@@ -440,6 +582,7 @@ program davidson
         end do
       end do
 
-    end subroutine
+    end subroutine checkOrth1mat
+ 
   end program davidson
       
