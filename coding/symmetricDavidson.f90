@@ -5,19 +5,19 @@ program davidson
 
   intrinsic                 ::  selected_real_kind
   integer,  parameter       ::  wp = selected_real_kind(15)
-  real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
+  real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS
   real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
   real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
-  real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
+  real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), temp(:,:), tau(:)
   integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in,  n_grow
-  real(wp)                  ::  dnrm2
+  real(wp)                  ::  dnrm2, diff
   logical, allocatable      ::  mask(:), converged(:)
   logical                   ::  matrix_not_full, verbose, GS_in_loop
 
 
 
   ndimA                 = 5
-  ndimV                 = 4
+  ndimV                 = 6
   maxiter               = 6
   eigen_in              = 2
   threshold_residual    = 1.d-4
@@ -28,7 +28,9 @@ program davidson
 
 
 ! allocate space to create matrix A
-  allocate(matA( ndimA, ndimA ), mask(ndimA), diagonalA(ndimA))
+  allocate (matA(ndimA, ndimA))
+  allocate (mask(ndimA))
+  allocate (diagonalA(ndimA))
 
 ! allocate space to obtain reduced space
   allocate(matV( ndimA, ndimV ), matW(ndimA, ndimV), matP(ndimV, ndimV))
@@ -38,7 +40,6 @@ program davidson
 
 ! allocate space for ritz vector and residual
   allocate(ritzVector(ndimA,ndimV), residual(ndimA, eigen_in))
-  allocate(ritzVectorTemp(ndimA))
 
 ! allocate space for diagonalization
   allocate(temp_mat(ndimV, eigen_in), temp_mat_prime(ndimA, eigen_in), temp(ndimA, eigen_in))
@@ -81,7 +82,7 @@ program davidson
   end do
 
   write(*,*) 'Matrix A'
-  call printMatrix(matA, ndimA, ndimA)
+!  call printMatrix(matA, ndimA, ndimA)
   print *
 
 
@@ -100,7 +101,7 @@ program davidson
 
   n_grow = eigen_in
 
-! start loop
+ !start loop
   outer: do it = 1, maxiter
       print *, '------------------------------'
       print *, 'Iteration', it
@@ -206,7 +207,8 @@ program davidson
   ! for eigen_in > 1 orthogonalize residual matrix
 
     if (eigen_in .GT. 1) then
-
+      allocate(tau(eigen_in))
+      tau             = zero
       call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
       lwork = int(lw(1))
       allocate(work(lwork))
@@ -217,6 +219,7 @@ program davidson
       call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
       call checkInfo(info, 'Orthogonalization of residual step 2')
       deallocate(work)
+      deallocate(tau)
 
       call checkOrth1mat(residual, eigen_in, 'Residual', thresh_GS)
       do i = 1, eigen_in
