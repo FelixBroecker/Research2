@@ -13,7 +13,7 @@ program davidson
 
   ndim          = 5
   eigen_in      = 2
-  verbose       = 3
+  verbose       = 1
   
 ! allocate space for matrix
   allocate(mat(ndim, ndim), diagonal(ndim),)
