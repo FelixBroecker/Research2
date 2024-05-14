@@ -18,7 +18,7 @@ program davidson
 ! allocate space for matrix
   allocate(mat(ndim, ndim), diagonal(ndim),)
 ! allocate space for eigenvecs and eigenvals
-  allocate(eigenvecs_lap(ndim, ndim), eigenvals_lap(ndim), eigenvecs_dav(eigen_in, eigen_in), eigenvals_dav(eigen_in))
+  allocate(eigenvecs_lap(ndim, ndim), eigenvals_lap(ndim), eigenvecs_dav(ndim, eigen_in), eigenvals_dav(eigen_in))
 
 
   zero = 0.0d0
@@ -64,7 +64,7 @@ program davidson
   print *
   print *, 'Eigenvectors'
   print *
-  call printMatrix(eigenvecs_dav, eigen_in, eigen_in)
+  call printMatrix(eigenvecs_dav, eigen_in, ndim)
 
   eigenvecs_lap = mat
   call cpu_time(start_lapack)
@@ -101,7 +101,7 @@ program davidson
   print * , 'overall wall time Davidson', end_david - start_david, 's'
   print * , 'overall wall time Lapack', end_lapack - start_lapack, 's'
 
-  deallocate(mat, diagonal, eigenvecs_lap, eigenvecs_dav, eigenvals_dav)
+  deallocate(mat, diagonal, eigenvecs_lap, eigenvecs_dav, eigenvals_dav, eigenvals_lap)
 
 
 contains
@@ -248,7 +248,7 @@ contains
       end if
 
     ! get ritz vector 
-      call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimV)
+      call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
 
       if (verbose .ge. 2) then
         print *
@@ -301,10 +301,8 @@ contains
 
       ! copy eigenpairs in output
           do i = 1, eigen_in 
-            return_eigenvals = eigenvals(i)
-            do j = 1, eigen_in
-                return_eigenvecs(i,j) = eigenvecs(i,j)
-            end do
+            return_eigenvals(i) = eigenvals(i)
+            return_eigenvecs(:,i) = ritzVector(:,i)
           end do
 
           exit outer
@@ -346,10 +344,7 @@ contains
         allocate(work(lwork))
         work = zero
         call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
-        call printMatrix(residual, eigen_in, ndimA)
         call checkInfo(info, 'Orthogonalization of residual step 1')
-        print *, 'Ritzvector all 2'
-        call printMatrix(ritzVector, n_grow, ndimA)
 
 
         call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
@@ -481,15 +476,19 @@ contains
       end if
 
 
-
     end do outer
-    print *, 'test'
-    !deallocate(matA, mask, diagonalA, matV, matW, matP, eigenvals, eigenvecs, &
-    !           ritzVector, residual, ritzVectorTemp, temp_mat, temp_mat_prime, temp, converged)
-    print *, 'test'
+
+    deallocate(matA, mask, diagonalA, matV, matW, matP, eigenvals, eigenvecs, &
+               ritzVector, residual, temp_mat, temp_mat_prime, temp, converged)
 
 
-  end subroutine symmetricDavidson
+    if (verbose .ge. 1) then
+      print *
+      print *, '-- end of Davidson routine --'
+      print *
+    end if
+
+end subroutine symmetricDavidson
 
 
   subroutine lapackDiag(mat, eigenvals, ndimMat)
