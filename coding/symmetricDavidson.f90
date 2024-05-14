@@ -11,9 +11,9 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim          = 8
-  eigen_in      = 3
-  verbose       = 3
+  ndim          = 12
+  eigen_in      = 4
+  verbose       = 1
   
 ! allocate space for matrix
   allocate(mat(ndim, ndim), diagonal(ndim),)
@@ -41,6 +41,7 @@ program davidson
     end do
   end do
 
+  print *
   print *, '----------------'
   print *, 'Input Matrix A'
   print *, '----------------'
@@ -48,15 +49,15 @@ program davidson
   call printMatrix(mat, ndim, ndim)
   print *
 
+  call cpu_time(start_david)
+  call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose)
+  call cpu_time(end_david)
+  
   print *
   print *, '----------------'
   print *, 'Results Davidson'
   print *, '----------------'
 
-  call cpu_time(start_david)
-  call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose)
-  call cpu_time(end_david)
-  
   print *
   print *, 'Eigenvalues:'
   print *
@@ -116,7 +117,7 @@ contains
     real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
     real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), tau(:)
     real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:),  temp(:,:)
-    integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow
+    integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow,  max_orth
     real(wp)                  ::  dnrm2, diff
     logical, allocatable      ::  mask(:), converged(:)
     logical                   ::  matrix_not_full, GS_in_loop, not_orthogonal
@@ -124,8 +125,9 @@ contains
 
 
     ndimA                 = dim_mat_in
-    ndimV                 = 8
-    maxiter               = 20
+    ndimV                 = 20
+    maxiter               = 30
+    max_orth              = 5
     threshold_residual    = 1.d-3
     thresh_GS             = 1.d-5
     GS_in_loop            = .false.
@@ -170,6 +172,9 @@ contains
     converged       = .false.
 
 
+    if (verbose .ge. 1) then
+      print *, '-- start of Davidson routine --'
+    end if
 
 !   get matrix diagonal
     do i = 1, dim_mat_in
@@ -369,35 +374,41 @@ contains
 !       matrix implementation
 
         else
-
-!         matrix product V^T * y  
-          call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
-
-!         matrix product V * (V^T * y)
-          call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
-
-!         y_prime = y - V * (V^T * y) 
-          do i = 1, eigen_in
-            residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
-          end do
-
-
-          if (verbose .ge. 3) then
-            print *
-            print *, 'y_i: Matrix product V^T * y'
-            call printMatrix(temp_mat, eigen_in, n_grow)
-            print *
-            print *, 'y_i: Matrix product V * ( V^T * y )'
-            call printMatrix(temp_mat_prime, eigen_in, ndimA)
-            print *
-            print *, 'Orthogonalized precondition y'
-            call printMatrix(residual, eigen_in, ndimA)
-          end if
-
-!         print a warning if matrix is not orthogonal 
-
           not_orthogonal = .false.
-          call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
+          do j = 1, max_orth
+            if (.not. not_orthogonal) then
+
+!             matrix product V^T * y  
+              call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
+
+!             matrix product V * (V^T * y)
+              call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
+
+!             y_prime = y - V * (V^T * y) 
+              do i = 1, eigen_in
+                residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
+              end do
+
+              if (verbose .ge. 3) then
+                print *
+                print *, 'y_i: Matrix product V^T * y'
+                call printMatrix(temp_mat, eigen_in, n_grow)
+                print *
+                print *, 'y_i: Matrix product V * ( V^T * y )'
+                call printMatrix(temp_mat_prime, eigen_in, ndimA)
+                print *
+                print *, 'Orthogonalized precondition y'
+                call printMatrix(residual, eigen_in, ndimA)
+              end if
+
+!             print a warning if matrix is not orthogonal 
+
+              call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
+            else
+              exit
+            end if
+          end do
+            
 
 
 !         orthogonalize residual with itself
