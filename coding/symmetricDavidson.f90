@@ -11,8 +11,8 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim          = 5
-  eigen_in      = 2
+  ndim          = 8
+  eigen_in      = 3
   verbose       = 3
   
 ! allocate space for matrix
@@ -124,8 +124,8 @@ contains
 
 
     ndimA                 = dim_mat_in
-    ndimV                 = 20
-    maxiter               = 30
+    ndimV                 = 8
+    maxiter               = 20
     threshold_residual    = 1.d-3
     thresh_GS             = 1.d-5
     GS_in_loop            = .false.
