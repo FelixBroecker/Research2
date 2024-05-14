@@ -110,12 +110,12 @@ contains
     real(wp), intent(in)      ::  mat_in(:,:)
     real(wp), intent(out)     ::  return_eigenvecs(:,:), return_eigenvals(:)
     integer, intent(in)       ::  dim_mat_in, eigen_in, verbose
-    real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
+    real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS
     real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
-    real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:)
-    real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
+    real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), tau(:)
+    real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:),  temp(:,:)
     integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow
-    real(wp)                  ::  dnrm2
+    real(wp)                  ::  dnrm2, diff
     logical, allocatable      ::  mask(:), converged(:)
     logical                   ::  matrix_not_full, GS_in_loop
 
@@ -247,11 +247,6 @@ contains
         call printMatrix(eigenvecs, n_grow, n_grow)
       end if
 
-if (it .eq. 2) then
-    print *, 'test'
-    !print *, ritzVector
-    stop
-endif
     ! get ritz vector 
       call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimV)
 
@@ -344,6 +339,8 @@ endif
     ! for eigen_in > 1 orthogonalize residual matrix
 
       if (eigen_in .GT. 1) then
+        allocate(tau(eigen_in))
+        tau = zero
         call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
         lwork = int(lw(1))
         allocate(work(lwork))
@@ -358,6 +355,7 @@ endif
         call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
         call checkInfo(info, 'Orthogonalization of residual step 2')
         deallocate(work)
+        deallocate(tau)
 
         call checkOrth1mat(residual, eigen_in, 'Residual', thresh_GS)
       end if
