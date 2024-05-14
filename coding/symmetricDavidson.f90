@@ -11,8 +11,8 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim          = 5
-  eigen_in      = 2
+  ndim          = 8
+  eigen_in      = 3
   verbose       = 3
   
 ! allocate space for matrix
@@ -117,15 +117,15 @@ contains
     integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow
     real(wp)                  ::  dnrm2, diff
     logical, allocatable      ::  mask(:), converged(:)
-    logical                   ::  matrix_not_full, GS_in_loop
+    logical                   ::  matrix_not_full, GS_in_loop, not_orthogonal
 
 
 
     ndimA                 = dim_mat_in
     ndimV                 = 8
-    maxiter               = 5
+    maxiter               = 10
     threshold_residual    = 1.d-4
-    thresh_GS             = 1.d-6
+    thresh_GS             = 1.d-5
     GS_in_loop            = .false.
 
 
@@ -277,7 +277,7 @@ contains
           print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
           print *
         end if
-        if(dnrm2(ndimA, residual, 1) <= threshold_residual) then
+        if(dnrm2(ndimA, residual(:,i), 1) .le. threshold_residual) then
           if (verbose .ge. 2) then
             print *, 'Converged for:', i
           end if
@@ -296,7 +296,6 @@ contains
            print *, 'Eigenvectors:'
            print *
            call printMatrix(eigenvecs, eigen_in, n_grow)
-           print *
          end if
 
       ! copy eigenpairs in output
@@ -332,29 +331,7 @@ contains
             end if
           end do
         end do
-
         
-    ! for eigen_in > 1 orthogonalize residual matrix
-
-      if (eigen_in .GT. 1) then
-        allocate(tau(eigen_in))
-        tau = zero
-        call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
-        lwork = int(lw(1))
-        allocate(work(lwork))
-        work = zero
-        call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
-        call checkInfo(info, 'Orthogonalization of residual step 1')
-
-
-        call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
-        call checkInfo(info, 'Orthogonalization of residual step 2')
-        deallocate(work)
-        deallocate(tau)
-
-        call checkOrth1mat(residual, eigen_in, 'Residual', thresh_GS)
-      end if
-
 
     ! Gram Schmidt orthogonalization
 
@@ -371,8 +348,8 @@ contains
           end do 
 
         ! print a warning if matrix is not orthogonal
-            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS)
-
+            not_orthogonal = .false.
+            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
         else
 
     ! matrix implementation
@@ -380,7 +357,7 @@ contains
         ! matrix product V^T * y  
           call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
 
-        ! matrix product V * (V^T * y) 
+        ! matrix product V * (V^T * y)
           call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
 
         ! y_prime = y - V * (V^T * y) 
@@ -390,6 +367,7 @@ contains
 
 
           if (verbose .ge. 3) then
+            print *
             print *, 'y_i: Matrix product V^T * y'
             call printMatrix(temp_mat, eigen_in, n_grow)
             print *
@@ -401,14 +379,13 @@ contains
           end if
 
 
-      ! print a warning if matrix is not orthogonal
-          call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS)
             
 
       !  orthonormalization
           do i = 1, eigen_in
             residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
           end do
+
           if (verbose .ge. 2) then
             print *
             print *, 'Orthonormalized precondition y'
@@ -416,6 +393,39 @@ contains
           end if
 
         end if  
+
+      ! print a warning if matrix is not orthogonal or residual not orthogonal to itself
+
+        not_orthogonal = .false.
+        call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
+
+        if (eigen_in .gt. 1) then
+          not_orthogonal = .false. 
+          call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .false.)
+
+          if (not_orthogonal) then
+            allocate(tau(eigen_in))
+            tau = zero
+            call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
+            lwork = int(lw(1))
+            allocate(work(lwork))
+            work = zero
+            call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
+            call checkInfo(info, 'Orthogonalization of residual step 1')
+
+
+            call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
+            call checkInfo(info, 'Orthogonalization of residual step 2')
+            deallocate(work)
+            deallocate(tau)
+
+            not_orthogonal = .false.
+            call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .true.)
+            if (not_orthogonal) then
+              print *, '---WARNING --- STILL RESIDUAL NOT ORTHOGONAL'
+            end if
+          end if
+        end if
 
         ! add orthonormal residual to subspace
 
@@ -471,7 +481,7 @@ contains
         residual        = zero
         temp            = zero
 
-        n_grow          = eigen_in
+        n_grow          =  eigen_in
       
       end if
 
@@ -554,22 +564,27 @@ end subroutine symmetricDavidson
 
 
 ! check if vectors of two matrices are orthogonal
-  subroutine checkOrth2mat(mat1, nrows1, mat1_name, mat2, nrows2, mat2_name, thresh)
+  subroutine checkOrth2mat(mat1, nrows1, mat1_name, mat2, nrows2, mat2_name, thresh, not_orthogonal, verbose)
     integer,              intent(in)      ::  nrows1, nrows2
     real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
-    character(len=*),    intent(in)      ::  mat1_name, mat2_name
+    character(len=*),    intent(in)       ::  mat1_name, mat2_name
     real(wp)                              ::  dot_prod
-    integer :: i,j 
+    integer                               :: i,j 
+    logical,              intent(inout)   :: not_orthogonal
+    logical,              intent(in)      :: verbose
 
     do i = 1, nrows1
       do j = 1, nrows2
         dot_prod = abs(dot_product( mat2(:,j), mat1(:,i) ))
         if ( dot_prod .GT. thresh ) then
-          print *
-          print *, '--- WARNING ---'
-          print *, 'vector', i, 'of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat2_name
-          print *, 'Result of dot product:', dot_prod
-          print *
+          not_orthogonal = .true.
+          if (verbose) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'vector ', i, ' of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat2_name
+            print *, 'Result of dot product:', dot_prod
+            print *
+          end if 
         end if
       end do
     end do
@@ -577,11 +592,13 @@ end subroutine symmetricDavidson
 
 
 ! check if the vectors within the matrix are orthogonal
-  subroutine checkOrth1mat(mat1, nrows1, mat1_name, thresh)
+  subroutine checkOrth1mat(mat1, nrows1, mat1_name, thresh, not_orthogonal, verbose)
 
     integer,              intent(in)      ::  nrows1
     real(wp),             intent(in)      ::  thresh, mat1(:,:)
-    character(len=*),    intent(in)       ::  mat1_name
+    character(len=*),     intent(in)      ::  mat1_name
+    logical,              intent(inout)   ::  not_orthogonal
+    logical,              intent(in)      :: verbose
     real(wp)                              ::  dot_prod
     integer :: i,j 
 
@@ -589,13 +606,16 @@ end subroutine symmetricDavidson
       do j = 1, nrows1
         if (j .NE. i) then
           dot_prod  = abs(dot_product( mat1(:,j), mat1(:,i) ))
-        end if
-        if ( dot_prod .GT. thresh ) then
-          print *
-          print *, '--- WARNING ---'
-          print *, 'vector', i, 'of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat1_name
-          print *, 'Result of dot product:', dot_prod
-          print *
+          if ( dot_prod .GT. thresh ) then
+            not_orthogonal = .true.
+            if (verbose) then 
+              print *
+              print *, '--- WARNING ---'
+              print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat1_name
+              print *, 'Result of dot product: ', dot_prod
+              print *
+            end if
+          end if
         end if
       end do
     end do
@@ -603,4 +623,3 @@ end subroutine symmetricDavidson
   end subroutine checkOrth1mat
  
 end program davidson
-      
