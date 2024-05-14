@@ -5,12 +5,12 @@ program davidson
 
   intrinsic                 ::  selected_real_kind
   integer,  parameter       ::  wp = selected_real_kind(15)
-  real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS, tau
+  real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS
   real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
-  real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:)
-  real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), diff, temp(:,:)
+  real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), ritzVectorTemp(:), tau(:)
+  real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:), temp(:,:)
   integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info, eigen_in,  n_grow
-  real(wp)                  ::  dnrm2
+  real(wp)                  ::  dnrm2, diff
   logical, allocatable      ::  mask(:), converged(:)
   logical                   ::  matrix_not_full, verbose, GS_in_loop
 
