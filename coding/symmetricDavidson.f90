@@ -5,15 +5,17 @@ program davidson
 
   intrinsic                 ::  selected_real_kind, abs
   integer,  parameter       ::  wp = selected_real_kind(15)
-  real(wp)                  ::  start_david, end_david, start_lapack, end_lapack, zero
+  real(wp)                  ::  start_david, end_david, start_lapack, end_lapack, zero, threshold_residual
   real(wp), allocatable     ::  mat(:,:), diagonal(:), eigenvals_lap(:), eigenvecs_lap(:,:), eigenvals_dav(:), eigenvecs_dav(:,:)
-  integer                   ::  i, j, ndim, eigen_in, verbose
+  integer                   ::  i, j, ndim, eigen_in, verbose, maxiter
   real(wp)                  ::  dnrm2
 
 
-  ndim          = 1000
-  eigen_in      = 2
-  verbose       = 2
+  ndim                  = 100
+  eigen_in              = 4
+  verbose               = 2
+  maxiter               = 100
+  threshold_residual    = 1.d-7
   
 ! allocate space for matrix
   allocate(mat(ndim, ndim), diagonal(ndim),)
@@ -43,7 +45,7 @@ program davidson
 
 
   call cpu_time(start_david)
-  call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose)
+  call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose, threshold_residual, maxiter)
   call cpu_time(end_david)
   
   print *
@@ -84,12 +86,6 @@ program davidson
   end do
   print * 
 
-  print *, 'Difference in eigenvalue'
-  do i= 1, eigen_in
-    print *, abs(dnrm2(eigen_in, eigenvecs_dav(:,i), 1) - dnrm2(eigen_in, eigenvecs_lap(:,i), 1))
-  end do
-  
-  
 
   print*
   print*, '------------------------------------------'
@@ -102,27 +98,26 @@ program davidson
 
 
 contains
-  subroutine symmetricDavidson(mat_in, dim_mat_in, return_eigenvecs, return_eigenvals, eigen_in, verbose)
+  subroutine symmetricDavidson(mat_in, dim_mat_in, return_eigenvecs, return_eigenvals, eigen_in, verbose, &
+      threshold_residual, maxiter)
 
-    real(wp), intent(in)      ::  mat_in(:,:)
+    real(wp), intent(in)      ::  mat_in(:,:), threshold_residual
     real(wp), intent(out)     ::  return_eigenvecs(:,:), return_eigenvals(:)
-    integer, intent(in)       ::  dim_mat_in, eigen_in, verbose
-    real(wp)                  ::  lw(1), threshold_residual, zero, check_GS, thresh_GS
+    integer, intent(in)       ::  dim_mat_in, eigen_in, verbose, maxiter
+    real(wp)                  ::  lw(1), zero, check_GS, thresh_GS
     real(wp), allocatable     ::  matA(:,:), matV(:,:), matW(:,:), matP(:,:),  diagonalA(:), eigenvals(:), eigenvecs(:,:), work(:)
     real(wp), allocatable     ::  ritzVector(:,:), temp_mat(:,:), tau(:)
     real(wp), allocatable     ::  residual(:,:), temp_mat_prime(:,:),  temp(:,:)
-    integer                   ::  i, j, it, ndimA, ndimV, maxiter, idxMaxVal(1), lwork, info,  n_grow,  max_orth
+    integer                   ::  i, j, it, ndimA, ndimV, idxMaxVal(1), lwork, info,  n_grow,  max_orth
     real(wp)                  ::  dnrm2, diff
     logical, allocatable      ::  mask(:), converged(:)
-    logical                   ::  matrix_not_full, GS_in_loop, not_orthogonal
+    logical                   ::  matrix_not_full, GS_in_loop, not_orthogonal, size_not_exceeded
 
 
 
     ndimA                 = dim_mat_in
     ndimV                 = 20
-    maxiter               = 100
     max_orth              = 5
-    threshold_residual    = 1.d-7
     thresh_GS             = 1.d-10
     GS_in_loop            = .false.
 
@@ -148,7 +143,7 @@ contains
 
 
 
-    zero                  = 0.0d0
+    zero            = 0.0d0
     
     matA            = zero
     diagonalA       = zero
@@ -258,11 +253,11 @@ contains
         end if
         if(dnrm2(ndimA, residual(:,i), 1) .le. threshold_residual) then
           if (verbose .ge. 2) then
-            print *
             print *, 'Converged for:', i
           end if
           converged(i) = .true.
         end if
+        print *
       end do
 
       if (all(converged)) then
@@ -293,9 +288,16 @@ contains
       end do
 
 
+!     check if reduced space would exceeds size of input Matrix
+      size_not_exceeded = .true.
+      if (n_grow + eigen_in .gt. ndimA) then
+        size_not_exceeded = .false.  
+      end if
+
+
 !     precondition y_i = r_i / (D - lambda_i)
 
-      if (matrix_not_full) then
+      if (matrix_not_full .and. size_not_exceeded) then
         do i = 1, eigen_in
           do j = 1, ndimA
             diff = diagonalA(j) - eigenvals(1)
@@ -351,9 +353,9 @@ contains
             not_orthogonal = .false.
             call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
 
-            if (.not. not_orthogonal) then
-              exit
-            end if
+            !if (.not. not_orthogonal) then
+            !  exit
+            !end if
 
             if (j .eq. max_orth) then
               print *
@@ -362,7 +364,6 @@ contains
             end if
 
           end do
-
             
 
 
