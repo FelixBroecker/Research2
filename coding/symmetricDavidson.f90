@@ -11,9 +11,9 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim          = 12
-  eigen_in      = 4
-  verbose       = 1
+  ndim          = 1000
+  eigen_in      = 2
+  verbose       = 2
   
 ! allocate space for matrix
   allocate(mat(ndim, ndim), diagonal(ndim),)
@@ -41,13 +41,6 @@ program davidson
     end do
   end do
 
-  print *
-  print *, '----------------'
-  print *, 'Input Matrix A'
-  print *, '----------------'
-  print *
-  call printMatrix(mat, ndim, ndim)
-  print *
 
   call cpu_time(start_david)
   call symmetricDavidson(mat, ndim, eigenvecs_dav, eigenvals_dav, eigen_in, verbose)
@@ -63,9 +56,6 @@ program davidson
   print *
   call printVector(eigenvals_dav, eigen_in)
   print *
-  print *, 'Eigenvectors'
-  print *
-  call printMatrix(eigenvecs_dav, eigen_in, ndim)
 
   eigenvecs_lap = mat
   call cpu_time(start_lapack)
@@ -79,12 +69,14 @@ program davidson
   print *
   print *, 'Eigenvalues:'
   print *
-  call printVector(eigenvals_lap, ndim)
+  call printVector(eigenvals_lap, eigen_in)
   print *
-  print *, 'Eigenvectors'
+
   print *
-  call printMatrix(eigenvecs_lap, ndim, ndim)
-  print * 
+  print *, '----------------'
+  print *, 'Comparison'
+  print *, '----------------'
+  print *
 
   print*, 'Difference in eigenvalues:'
   do i = 1, eigen_in
@@ -101,8 +93,10 @@ program davidson
 
   print*
   print*, '------------------------------------------'
+  print*
   print * , 'overall wall time Davidson', end_david - start_david, 's'
   print * , 'overall wall time Lapack', end_lapack - start_lapack, 's'
+  print*
 
   deallocate(mat, diagonal, eigenvecs_lap, eigenvecs_dav, eigenvals_dav, eigenvals_lap)
 
@@ -126,10 +120,10 @@ contains
 
     ndimA                 = dim_mat_in
     ndimV                 = 20
-    maxiter               = 30
+    maxiter               = 100
     max_orth              = 5
-    threshold_residual    = 1.d-3
-    thresh_GS             = 1.d-5
+    threshold_residual    = 1.d-7
+    thresh_GS             = 1.d-10
     GS_in_loop            = .false.
 
 
@@ -173,7 +167,9 @@ contains
 
 
     if (verbose .ge. 1) then
+      print *
       print *, '-- start of Davidson routine --'
+      print *
     end if
 
 !   get matrix diagonal
@@ -187,13 +183,6 @@ contains
 
     matA = mat_in
 
-    if (verbose .ge. 2) then
-      write(*,*) 'Matrix A'
-      call printMatrix(matA, ndimA, ndimA)
-      print *
-    end if
-
-
 !   get initial vector
 !   search for column with maximum value and use that column for initial vector
 
@@ -203,23 +192,16 @@ contains
       mask(idxMaxVal) = .false.
     end do 
 
-    if (verbose .ge. 2) then
-      write(*,*) 'Initial Vector'
-      call printMatrix(matV, eigen_in, ndimA)
-      print *
-    end if
-
-
     n_grow = eigen_in
 
 !   start loop
 
     outer: do it = 1, maxiter
       if (verbose .ge. 2) then
+        print *
         print *, '------------------------------'
         print *, 'Iteration', it
         print *, '------------------------------'
-        print *
       end if
 
       eigenvecs = 0.0d0
@@ -232,10 +214,8 @@ contains
 
 
       if (verbose .ge. 3) then
-        print *, 'Matrixproduct W (A V) :'
-        call printMatrix(matW, n_grow, ndimA)
         print *
-        write(*,*) 'Matrixproduct (W)T V = P'
+        write(*,*) 'Reduced Space P [Matrixproduct (W)T V = P]'
         call printMatrix(matP, n_grow, n_grow)
       end if
 
@@ -253,22 +233,14 @@ contains
       if (verbose .ge. 2) then
         print *
         print *, 'Eigenvalues:'
-        call printVector(eigenvals, n_grow)
-        print *
-        print *, 'Eigenvectors:'
-        call printMatrix(eigenvecs, n_grow, n_grow)
+        call printVector(eigenvals, eigen_in)
+        print*
       end if
 
 !     get ritz vector 
 
       call dgemm('n', 'n', ndimA, n_grow, ndimV, 1.0d0, matV, ndimA, eigenvecs, ndimV, 0.0d0, ritzVector, ndimA)
 
-      if (verbose .ge. 2) then
-        print *
-        print *, 'Ritzvector all'
-        call printMatrix(ritzVector, n_grow, ndimA)
-        print *
-      end if
 
 !     get residual
 
@@ -277,23 +249,16 @@ contains
         call daxpy(ndimA, -eigenvals(i), ritzVector(:,i), 1, residual(:,i), 1)
       end do
 
-      if (verbose .ge. 3) then
-        print *
-        print *, 'Residual'
-        call printMatrix(residual, eigen_in, ndimA)
-        print *
-      end if
-
 
 !     compute norm and check convergency
 
       do i = 1, eigen_in
         if (verbose .ge. 2) then
           print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
-          print *
         end if
         if(dnrm2(ndimA, residual(:,i), 1) .le. threshold_residual) then
           if (verbose .ge. 2) then
+            print *
             print *, 'Converged for:', i
           end if
           converged(i) = .true.
@@ -303,14 +268,6 @@ contains
       if (all(converged)) then
         if (verbose .ge. 1) then
           print *, 'Converged for all sought eigenpairs after', it, 'iterations.'
-          print *
-          print *, 'Eigenvalues:'
-          print *
-          call printVector(eigenvals, eigen_in)
-          print *
-          print *, 'Eigenvectors:'
-          print *
-          call printMatrix(eigenvecs, eigen_in, n_grow)
         end if
 
 
@@ -374,40 +331,38 @@ contains
 !       matrix implementation
 
         else
-          not_orthogonal = .false.
           do j = 1, max_orth
+
+            temp_mat        = zero
+            temp_mat_prime  = zero
+
+!           matrix product V^T * y  
+            call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
+
+!           matrix product V * (V^T * y)
+            call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
+
+!           y_prime = y - V * (V^T * y) 
+            do i = 1, eigen_in
+              residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
+            end do
+
+!           print a warning if matrix is not orthogonal 
+            not_orthogonal = .false.
+            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
+
             if (.not. not_orthogonal) then
-
-!             matrix product V^T * y  
-              call dgemm('t', 'n',  n_grow, eigen_in ,ndimA, 1.0d0, matV, ndimA, residual, ndimA, 0.0d0, temp_mat, ndimV)
-
-!             matrix product V * (V^T * y)
-              call dgemm('n', 'n', ndimA, eigen_in, n_grow, 1.0d0, matV, ndimA, temp_mat, ndimV, 0.0d0, temp_mat_prime, ndimA)
-
-!             y_prime = y - V * (V^T * y) 
-              do i = 1, eigen_in
-                residual(:, i) = residual(:, i) - temp_mat_prime(:, i)
-              end do
-
-              if (verbose .ge. 3) then
-                print *
-                print *, 'y_i: Matrix product V^T * y'
-                call printMatrix(temp_mat, eigen_in, n_grow)
-                print *
-                print *, 'y_i: Matrix product V * ( V^T * y )'
-                call printMatrix(temp_mat_prime, eigen_in, ndimA)
-                print *
-                print *, 'Orthogonalized precondition y'
-                call printMatrix(residual, eigen_in, ndimA)
-              end if
-
-!             print a warning if matrix is not orthogonal 
-
-              call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
-            else
               exit
             end if
+
+            if (j .eq. max_orth) then
+              print *
+              print *, 'GS orthogonalization did not converged to orthogonality.'
+              print *
+            end if
+
           end do
+
             
 
 
@@ -447,12 +402,6 @@ contains
             residual(:,i) = residual(:,i) /  dnrm2(ndimA, residual(:,i), 1)
           end do
 
-          if (verbose .ge. 2) then
-            print *
-            print *, 'Orthonormalized precondition y'
-            call printMatrix(residual, eigen_in, ndimA)
-          end if
-
         end if  
 
 
@@ -463,14 +412,6 @@ contains
         do i = 1, eigen_in
           matV(:, n_grow  + i) = residual(:,i)
         end do
-
-        if (verbose .ge. 3) then
-          print *
-          print *, 'New subspace V'
-          call printMatrix(matV, n_grow + eigen_in, ndimA)
-          print *
-          print *
-        end if 
 
 
 !       handle case if not converged after maxiter steps
@@ -489,7 +430,7 @@ contains
         n_grow = n_grow + eigen_in 
 
 
-!       treat case if matrix full
+!     treat case if matrix full
       else
 
         matV            = zero
@@ -497,16 +438,6 @@ contains
         do i = 1, eigen_in
           matV(:, i) = ritzVector(:, i)
         end do
-
-        if (verbose .ge. 2) then
-          print *
-          print *, 'Matrix V full'
-          print *
-          print *, 'New subspace'
-          call printMatrix(matV, eigen_in, ndimA)
-          print *
-          print *
-        end if
 
 !       restart
 
