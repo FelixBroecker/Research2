@@ -117,8 +117,8 @@ contains
 
     ndimA                 = dim_mat_in
     ndimV                 = 20
-    max_orth              = 5
-    thresh_GS             = 1.d-10
+    max_orth              = 10
+    thresh_GS             = 1.d-12
     GS_in_loop            = .false.
 
 
@@ -283,6 +283,9 @@ contains
       do i = 1, ndimA
         if (matV(i, ndimV + 1 - eigen_in) /= 0.0d0) then
           matrix_not_full = .false.   
+          if (verbose .gt. 2) then
+            print *, 'Subspace V is full'
+          end if
           exit
         end if
       end do
@@ -351,52 +354,49 @@ contains
 
 !           print a warning if matrix is not orthogonal 
             not_orthogonal = .false.
-            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
+            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .false.)
 
-            !if (.not. not_orthogonal) then
-            !  exit
-            !end if
 
+!
+!         orthogonalize residual with itself (QR)
+!
+            if (eigen_in .gt. 1) then
+!
+              allocate(tau(eigen_in))
+              tau = zero
+              call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
+              lwork = int(lw(1))
+              allocate(work(lwork))
+              work = zero
+              call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
+              call checkInfo(info, 'Orthogonalization of residual step 1')
+!
+!
+              call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
+              call checkInfo(info, 'Orthogonalization of residual step 2')
+              deallocate(work)
+              deallocate(tau)
+
+
+!             check if orthogonal
+
+              call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .true.)
+            end if
+            
+            if (.not. not_orthogonal) then
+              print *, 'orthogonal after', j, 'iterations'
+              exit
+            end if
+              
             if (j .eq. max_orth) then
               print *
-              print *, 'GS orthogonalization did not converged to orthogonality.'
+              print *, 'GS orthogonalization did not result in an orthogonormal matrix after ', max_orth, 'orthogonalizations.'
               print *
+              exit outer
             end if
 
           end do
             
-
-
-!         orthogonalize residual with itself
-
-          if (eigen_in .gt. 1) then
-
-            allocate(tau(eigen_in))
-            tau = zero
-            call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, lw, -1, info)
-            lwork = int(lw(1))
-            allocate(work(lwork))
-            work = zero
-            call dgeqrf(ndimA, eigen_in, residual, ndimA, tau, work, lwork, info)
-            call checkInfo(info, 'Orthogonalization of residual step 1')
-
-
-            call dorgqr(ndimA, eigen_in, eigen_in, residual, ndimA, tau, work, lwork, info)
-            call checkInfo(info, 'Orthogonalization of residual step 2')
-            deallocate(work)
-            deallocate(tau)
-
-
-!           check if orthogonal
-
-            not_orthogonal = .false.
-            call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .true.)
-            if (not_orthogonal) then
-              print *, '---WARNING --- RESIDUAL NOT ORTHOGONAL'
-            end if
-          end if
-
-          
 
 !         orthonormalization
           do i = 1, eigen_in
@@ -435,9 +435,56 @@ contains
       else
 
         matV            = zero
-
+!
         do i = 1, eigen_in
           matV(:, i) = ritzVector(:, i)
+        end do
+!
+!       orthogonalize new subspace with itself with itself (QR)
+!
+        do j = 1, max_orth
+          if (eigen_in .gt. 1) then
+!
+            allocate(tau(eigen_in))
+            tau = zero
+            call dgeqrf(ndimA, eigen_in, matV, ndimA, tau, lw, -1, info)
+            lwork = int(lw(1))
+            allocate(work(lwork))
+            work = zero
+            call dgeqrf(ndimA, eigen_in, matV, ndimA, tau, work, lwork, info)
+            call checkInfo(info, 'Orthogonalization of Ritzvector step 1')
+!
+!
+            call dorgqr(ndimA, eigen_in, eigen_in, matV, ndimA, tau, work, lwork, info)
+            call checkInfo(info, 'Orthogonalization of Ritzvector step 2')
+            deallocate(work)
+            deallocate(tau)
+
+
+!           check if orthogonal
+            call checkOrth1mat(matV, eigen_in, 'Ritzvecotor after Restart', thresh_GS, not_orthogonal, .true.)
+          end if
+          
+          if (not_orthogonal) then
+            print *, 'RESIDUAL NOT ORTHOGONAL TO ITSELF OR TO SUBSPACE'
+          else
+            print *, 'orthogonal after', j, 'iterations'
+            exit
+          end if
+            
+          if (j .eq. max_orth) then
+            print *
+            print *, 'GS orthogonalization did not result in an orthogonormal matrix after ', max_orth, 'orthogonalizations.'
+            print *
+            exit outer
+          end if
+
+        end do
+            
+
+!       orthonormalization
+        do i = 1, eigen_in
+          matV(:,i) = matV(:,i) /  dnrm2(ndimA, matV(:,i), 1)
         end do
 
 !       restart
@@ -470,11 +517,13 @@ contains
     end if
 
   end subroutine symmetricDavidson
-
-
+!
+!
+!
   subroutine lapackDiag(mat, eigenvals, ndimMat)
+!
 ! get diagonalized matrix with lapack function
-
+!
     real(wp),   intent(inout)     :: mat(:,:)
     real(wp),   intent(out)       :: eigenvals(:)
     integer,    intent(in)        :: ndimMat
@@ -490,11 +539,13 @@ contains
     deallocate(work)
 
   end subroutine lapackDiag
-
-
+!
+!
+!
   subroutine printMatrix(mat, nrows, ncols) 
+!   
 ! print formatted matrix
-
+!
     real(wp), intent(in)  :: mat(:,:)
     integer , intent(in)  :: nrows, ncols
     integer :: i,j 
@@ -504,11 +555,13 @@ contains
     end do
 
   end subroutine printMatrix
-
-
+!
+!
+! 
   subroutine printVector(vec, lenRow)
+!    
 ! print formatted vector
-
+!
     real(wp), intent(in)  :: vec(:)
     integer,  intent(in)  :: lenRow
     integer               :: i
@@ -518,11 +571,13 @@ contains
     end do
 
   end subroutine printVector
-
-
+!
+!
+!
   subroutine checkInfo(info, occasion)
+!    
 ! check if info is zero and print error message if not
-
+!
     integer               :: info, zero
     character(len=*)     :: occasion
 
@@ -534,14 +589,15 @@ contains
       print *, 'Process terminated with info not equal to 0'
       print*
     end if
-
+!
   end subroutine checkInfo
-
-
-  subroutine checkOrth2mat(mat1, nrows1, mat1_name, mat2, nrows2, mat2_name, thresh, not_orthogonal, verbose)
+!
+!
+  subroutine checkOrth2mat(mat1, ncols1, mat1_name, mat2, ncols2, mat2_name, thresh, not_orthogonal, verbose)
+!    
 ! check if vectors of two matrices are orthogonal
-
-    integer,              intent(in)      ::  nrows1, nrows2
+!
+    integer,              intent(in)      ::  ncols1, ncols2
     real(wp),             intent(in)      ::  thresh, mat1(:,:), mat2(:,:)
     character(len=*),    intent(in)       ::  mat1_name, mat2_name
     real(wp)                              ::  dot_prod
@@ -549,8 +605,8 @@ contains
     logical,              intent(inout)   :: not_orthogonal
     logical,              intent(in)      :: verbose
 
-    do i = 1, nrows1
-      do j = 1, nrows2
+    do i = 1, ncols1
+      do j = 1, ncols2
         dot_prod = abs(dot_product( mat2(:,j), mat1(:,i) ))
         if ( dot_prod .GT. thresh ) then
           not_orthogonal = .true.
@@ -568,10 +624,10 @@ contains
   end subroutine checkOrth2mat
 
 
-  subroutine checkOrth1mat(mat1, nrows1, mat1_name, thresh, not_orthogonal, verbose)
+  subroutine checkOrth1mat(mat1, ncols1, mat1_name, thresh, not_orthogonal, verbose)
 ! check if the vectors within the matrix are orthogonal
 
-    integer,              intent(in)      ::  nrows1
+    integer,              intent(in)      ::  ncols1
     real(wp),             intent(in)      ::  thresh, mat1(:,:)
     character(len=*),     intent(in)      ::  mat1_name
     logical,              intent(inout)   ::  not_orthogonal
@@ -579,8 +635,8 @@ contains
     real(wp)                              ::  dot_prod
     integer :: i,j 
 
-    do i = 1, nrows1
-      do j = 1, nrows1
+    do i = 1, ncols1
+      do j = 1, ncols1
         if (j .NE. i) then
           dot_prod  = abs(dot_product( mat1(:,j), mat1(:,i) ))
           if ( dot_prod .GT. thresh ) then
