@@ -49,15 +49,14 @@ program davidson
   call cpu_time(end_david)
   
   print *
-  print *, '----------------'
-  print *, 'Results Davidson'
-  print *, '----------------'
+  print *, '----------------------------------------------------------------'
+  print *, '                        Results Davidson'
+  print *, '----------------------------------------------------------------'
 
   print *
   print *, 'Eigenvalues:'
   print *
   call printVector(eigenvals_dav, eigen_in)
-  print *
 
   eigenvecs_lap = mat
   call cpu_time(start_lapack)
@@ -65,33 +64,33 @@ program davidson
   call cpu_time(end_lapack)
 
   print *
-  print *, '----------------'
-  print *, 'Results Lapack'
-  print *, '----------------'
+  print *, '----------------------------------------------------------------'
+  print *, '                         Results Lapack'
+  print *, '----------------------------------------------------------------'
   print *
   print *, 'Eigenvalues:'
   print *
   call printVector(eigenvals_lap, eigen_in)
-  print *
 
   print *
-  print *, '----------------'
-  print *, 'Comparison'
-  print *, '----------------'
+  print *, '----------------------------------------------------------------'
+  print *, '                          Comparison'
+  print *, '----------------------------------------------------------------'
   print *
 
   print*, 'Difference in eigenvalues:'
   do i = 1, eigen_in
     print *, eigenvals_dav(i) - eigenvals_lap(i)
   end do
-  print * 
 
 
   print*
-  print*, '------------------------------------------'
+  print*, '================================================================='
   print*
   print * , 'overall wall time Davidson', end_david - start_david, 's'
-  print * , 'overall wall time Lapack', end_lapack - start_lapack, 's'
+  print * , 'overall wall time Lapack  ', end_lapack - start_lapack, 's'
+  print*
+  print*, '================================================================='  
   print*
 
   deallocate(mat, diagonal, eigenvecs_lap, eigenvecs_dav, eigenvals_dav, eigenvals_lap)
@@ -116,12 +115,14 @@ contains
 
 
     ndimA                 = dim_mat_in
-    ndimV                 = 20
+    ndimV                 = 24 
     max_orth              = 10
     thresh_GS             = 1.d-12
     GS_in_loop            = .false.
-
-
+!
+!   expands subspace that space is always completely used
+!
+    ndimV                 = ndimV + mod(ndimV, eigen_in)
 
 !   allocate space to create matrix A
     allocate(matA( ndimA, ndimA), mask(ndimA), diagonalA(ndimA))
@@ -163,7 +164,7 @@ contains
 
     if (verbose .ge. 1) then
       print *
-      print *, '-- start of Davidson routine --'
+      print *, '-------------------- start of Davidson routine -----------------'
       print *
     end if
 
@@ -194,9 +195,9 @@ contains
     outer: do it = 1, maxiter
       if (verbose .ge. 2) then
         print *
-        print *, '------------------------------'
+        print *, '----------------------------------------------------------------'
         print *, 'Iteration', it
-        print *, '------------------------------'
+        print *, '----------------------------------------------------------------'
       end if
 
       eigenvecs = 0.0d0
@@ -208,11 +209,6 @@ contains
       call dgemm('t', 'n', ndimV, n_grow, ndimA, 1.0d0, matW, ndimA, matV, ndimA, 0.0d0, matP, ndimV)
 
 
-      if (verbose .ge. 3) then
-        print *
-        write(*,*) 'Reduced Space P [Matrixproduct (W)T V = P]'
-        call printMatrix(matP, n_grow, n_grow)
-      end if
 !
 !     diagonalize and obtain eigenvalues and eigenvectors 
 !
@@ -278,15 +274,21 @@ contains
 !     check if matrix is not full
 
       matrix_not_full = .true.
-      do i = 1, ndimA
-        if (matV(i, ndimV + 1 - eigen_in) /= 0.0d0) then
-          matrix_not_full = .false.   
-          if (verbose .gt. 2) then
-            print *, 'Subspace V is full'
-          end if
-          exit
+      if (n_grow .gt. ndimV - eigen_in) then
+        matrix_not_full = .false.
+        if (verbose .gt. 2) then
+          print *, 'Subspace V is full'
         end if
-      end do
+      end if
+      !do i = 1, ndimA
+      !  if (matV(i, ndimV + 1 - eigen_in) /= 0.0d0) then
+      !    matrix_not_full = .false.   
+      !    if (verbose .gt. 2) then
+      !      print *, 'Subspace V is full'
+      !    end if
+      !    exit
+      !  end if
+      !end do
 
 
 !     check if reduced space would exceeds size of input Matrix
@@ -469,7 +471,7 @@ contains
 
     if (verbose .ge. 1) then
       print *
-      print *, '-- end of Davidson routine --'
+      print *, '--------------------- end of Davidson routine ------------------'
       print *
     end if
 
