@@ -11,9 +11,9 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim                  = 100
-  eigen_in              = 4
-  verbose               = 2
+  ndim                  = 1000
+  eigen_in              = 9
+  verbose               = 1
   maxiter               = 100
   threshold_residual    = 1.d-7
   
@@ -213,17 +213,16 @@ contains
         write(*,*) 'Reduced Space P [Matrixproduct (W)T V = P]'
         call printMatrix(matP, n_grow, n_grow)
       end if
-
-
-
+!
 !     diagonalize and obtain eigenvalues and eigenvectors 
-
+!
       eigenvecs = matP
       call dsyev('V', 'u', n_grow, eigenvecs, ndimV, eigenvals, lw, -1, info)
       lwork = int(lw(1))
       allocate(work(lwork))
       call dsyev('V', 'u', n_grow, eigenvecs, ndimV, eigenvals, work, lwork, info)
       deallocate(work)
+      call checkInfo(info, 'Diagonalization of projection Space P')
 
       if (verbose .ge. 2) then
         print *
@@ -257,7 +256,6 @@ contains
           end if
           converged(i) = .true.
         end if
-        print *
       end do
 
       if (all(converged)) then
@@ -354,7 +352,7 @@ contains
 
 !           print a warning if matrix is not orthogonal 
             not_orthogonal = .false.
-            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .false.)
+            call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .true.)
 
 
 !
@@ -379,18 +377,24 @@ contains
 
 
 !             check if orthogonal
-
-              call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .true.)
+              
+!             print a warning if matrix is not orthogonal 
+              not_orthogonal = .false.
+              call checkOrth2mat(residual, eigen_in, 'Residual', matV, n_grow, 'Matrix V', thresh_GS, not_orthogonal, .false.)
+              call checkOrth1mat(residual, eigen_in, 'Precondition', thresh_GS, not_orthogonal, .false.)
             end if
             
             if (.not. not_orthogonal) then
-              print *, 'orthogonal after', j, 'iterations'
-              exit
+              if (verbose .gt. 2) then
+                print *, 'orthogonal after', j, 'iterations'
+              end if
+                exit
             end if
               
             if (j .eq. max_orth) then
               print *
-              print *, 'GS orthogonalization did not result in an orthogonormal matrix after ', max_orth, 'orthogonalizations.'
+              print *, '*** GS orthogonalization did not result in an orthogonormal matrix after ', max_orth, &
+                                                                        'orthogonalizations.***'
               print *
               exit outer
             end if
@@ -440,55 +444,8 @@ contains
           matV(:, i) = ritzVector(:, i)
         end do
 !
-!       orthogonalize new subspace with itself with itself (QR)
-!
-        do j = 1, max_orth
-          if (eigen_in .gt. 1) then
-!
-            allocate(tau(eigen_in))
-            tau = zero
-            call dgeqrf(ndimA, eigen_in, matV, ndimA, tau, lw, -1, info)
-            lwork = int(lw(1))
-            allocate(work(lwork))
-            work = zero
-            call dgeqrf(ndimA, eigen_in, matV, ndimA, tau, work, lwork, info)
-            call checkInfo(info, 'Orthogonalization of Ritzvector step 1')
-!
-!
-            call dorgqr(ndimA, eigen_in, eigen_in, matV, ndimA, tau, work, lwork, info)
-            call checkInfo(info, 'Orthogonalization of Ritzvector step 2')
-            deallocate(work)
-            deallocate(tau)
-
-
-!           check if orthogonal
-            call checkOrth1mat(matV, eigen_in, 'Ritzvecotor after Restart', thresh_GS, not_orthogonal, .true.)
-          end if
-          
-          if (not_orthogonal) then
-            print *, 'RESIDUAL NOT ORTHOGONAL TO ITSELF OR TO SUBSPACE'
-          else
-            print *, 'orthogonal after', j, 'iterations'
-            exit
-          end if
-            
-          if (j .eq. max_orth) then
-            print *
-            print *, 'GS orthogonalization did not result in an orthogonormal matrix after ', max_orth, 'orthogonalizations.'
-            print *
-            exit outer
-          end if
-
-        end do
-            
-
-!       orthonormalization
-        do i = 1, eigen_in
-          matV(:,i) = matV(:,i) /  dnrm2(ndimA, matV(:,i), 1)
-        end do
-
 !       restart
-
+!
         matW            = zero
         matP            = zero
         eigenvals       = zero
@@ -613,7 +570,7 @@ contains
           if (verbose) then
             print *
             print *, '--- WARNING ---'
-            print *, 'vector ', i, ' of matrix', mat1_name, 'is not orthogonal to vector', j, 'of matrix', mat2_name
+            print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat2_name
             print *, 'Result of dot product:', dot_prod
             print *
           end if 
