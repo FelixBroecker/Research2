@@ -1,6 +1,29 @@
 program davidson
 
   implicit none
+!
+!
+!
+!                        0==========|  
+!                   0===//   0======| 
+!               0==//   0===//   0==|
+!           0==//  0===//    0==//  |
+!       :::// 0===//   0====//      |
+!    =========// 0====//            |
+!   ============//                  |
+!  ============x                    |
+!   ============\\                  |
+!    =========\\ 0====\\            |
+!       :::\\ 0===\\   0====\\      |
+!           0==\\  0===\\    0==\\  |
+!               0==\\   0===\\   0==| 
+!                   0===\\   0======| 
+!                        0==========| 
+!
+!
+!
+!
+!
  
 
   intrinsic                 ::  selected_real_kind, abs
@@ -115,14 +138,10 @@ contains
 
 
     ndimA                 = dim_mat_in
-    ndimV                 = 24 
+    ndimV                 = 20 * eigen_in
     max_orth              = 10
     thresh_GS             = 1.d-12
     GS_in_loop            = .false.
-!
-!   expands subspace that space is always completely used
-!
-    ndimV                 = ndimV + mod(ndimV, eigen_in)
 
 !   allocate space to create matrix A
     allocate(matA( ndimA, ndimA), mask(ndimA), diagonalA(ndimA))
@@ -280,15 +299,6 @@ contains
           print *, 'Subspace V is full'
         end if
       end if
-      !do i = 1, ndimA
-      !  if (matV(i, ndimV + 1 - eigen_in) /= 0.0d0) then
-      !    matrix_not_full = .false.   
-      !    if (verbose .gt. 2) then
-      !      print *, 'Subspace V is full'
-      !    end if
-      !    exit
-      !  end if
-      !end do
 
 
 !     check if reduced space would exceeds size of input Matrix
