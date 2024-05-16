@@ -11,8 +11,8 @@ program davidson
   real(wp)                  ::  dnrm2
 
 
-  ndim                  = 1000
-  eigen_in              = 9
+  ndim                  = 100
+  eigen_in              = 4
   verbose               = 1
   maxiter               = 100
   threshold_residual    = 1.d-7
@@ -461,7 +461,10 @@ contains
         n_grow          =  eigen_in
         
       end if
-
+      
+      if (it .eq. maxiter .and. verbose .ge. 1) then
+        print *, '** Davidson routine not converged after ', it,' iterations. **' 
+      end if
 
     end do outer
 
