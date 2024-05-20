@@ -6,7 +6,7 @@ FFLAGS = -Og -std=f95 --pedantic -ftrapv -fcheck=all -g -fbacktrace -ffpe-trap=z
 LIBS = -lblas -llapack 
 #LIBS = -L/opt/OpenBLAS/lib -lopenblas
 
-MODS   = 
+MODS   = diagonalization.o
 OBJS   = symmetricDavidson.o
 #
 all:    $(MODS) $(OBJS)

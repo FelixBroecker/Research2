@@ -1,5 +1,5 @@
 program davidson
-
+ use diagonalization
   implicit none
 !
 !
@@ -32,7 +32,7 @@ program davidson
   real(wp), allocatable     ::  mat(:,:), diagonal(:), eigenvals_lap(:), eigenvecs_lap(:,:), eigenvals_dav(:), eigenvecs_dav(:,:)
   integer                   ::  i, j, ndim, eigen_in, verbose, maxiter
   real(wp)                  ::  dnrm2
-
+  real(wp), allocatable     :: test(:,:)
 
   ndim                  = 100
   eigen_in              = 4
@@ -52,7 +52,6 @@ program davidson
   eigenvecs_lap = zero
   eigenvals_lap = zero
 
-
 ! get matrix
   do i = 1, ndim
     do j = i, ndim
@@ -65,6 +64,14 @@ program davidson
       end if
     end do
   end do
+
+!cholesky call
+!allocate(test(3,3))
+!test(1,:)=(/ 25,  15,  -5 /)
+!test(2,:)=(/ 15,  18,   0 /)
+!test(3,:)=(/ -5,   0,  11 /)
+!call cholesky(3,3,test)
+!stop
 
 
   call cpu_time(start_david)
