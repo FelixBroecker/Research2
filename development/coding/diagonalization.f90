@@ -379,13 +379,13 @@ contains
 !
 !
 !
-  subroutine cholesky(m, n, A)
+  subroutine cholesky(m, n, A, verbose)
   intrinsic                 ::  selected_real_kind, sqrt
   integer,  parameter       ::  wp = selected_real_kind(15)
 !
 !  takes matrix A with m rows and n columns
 !
-    integer,    intent(in)    :: m, n
+    integer,    intent(in)    :: m, n, verbose
     real(wp),   intent(inout) :: A(:,:)
     real(wp),   allocatable   :: L(:,:)
     integer                   :: i, k, j 
@@ -418,7 +418,10 @@ contains
       end do
     end do
 !
-  call printMatrix(L, m, n)
+  if (verbose .gt. 1) then
+    call printMatrix(L, m, n)
+  end if
+  A = L
 !
   end subroutine cholesky
 !

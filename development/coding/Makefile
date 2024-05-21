@@ -7,7 +7,7 @@ LIBS = -lblas -llapack
 #LIBS = -L/opt/OpenBLAS/lib -lopenblas
 
 MODS   = diagonalization.o
-OBJS   = symmetricDavidson.o
+OBJS   = main.o
 #
 all:    $(MODS) $(OBJS)
 	$(FC) $(FFLAGS) -o main.exe $(OBJS) $(MODS) $(LIBS)
