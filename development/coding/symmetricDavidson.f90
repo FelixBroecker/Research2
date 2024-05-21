@@ -32,12 +32,11 @@ program davidson
   real(wp), allocatable     ::  mat(:,:)
   integer                   ::  i, j, ndim, eigen_in, verbose, max_iter
   real(wp)                  ::  dnrm2
-  real(wp), allocatable     :: test(:,:)
 
   
 
-  ndim                  = 100
-  zero = 0.0d0
+  ndim                  = 5
+  zero                  = 0.0d0
 !
 ! get matrix
 !
@@ -58,14 +57,11 @@ program davidson
     end do
   end do
 
+
 !
-!cholesky call
-!allocate(test(3,3))
-!test(1,:)=(/ 25,  15,  -5 /)
-!test(2,:)=(/ 15,  18,   0 /)
-!test(3,:)=(/ -5,   0,  11 /)
-!call cholesky(3,3,test)
-!stop
+!  call cholesky decomposition
+!
+  call testCholesky(ndim, ndim, mat, .false.)
 
 !
 !  settings for davidson and call routine
@@ -94,7 +90,6 @@ contains
     real(wp)                  ::  start_david, end_david, start_lapack, end_lapack, zero
     real(wp), allocatable     ::  eigenvals_lap(:), eigenvecs_lap(:,:), eigenvals_dav(:), eigenvecs_dav(:,:)
     real(wp)                  ::  dnrm2
-    real(wp), allocatable     :: test(:,:)
 
     
 !   allocate space for eigenvecs and eigenvals
@@ -141,15 +136,15 @@ contains
 
     print*, 'Difference in eigenvalues:'
     do i = 1, eigen_in
-      print *, eigenvals_dav(i) - eigenvals_lap(i)
+      print '(E13.3)', eigenvals_dav(i) - eigenvals_lap(i)
     end do
 
 
     print*
     print*, '================================================================='
     print*
-    print * , 'overall wall time Davidson', end_david - start_david, 's'
-    print * , 'overall wall time Lapack  ', end_lapack - start_lapack, 's'
+    print '(A, E13.3, A)' , 'overall wall time Davidson', end_david - start_david, ' s'
+    print '(A, E13.3, A)' , 'overall wall time Lapack  ', end_lapack - start_lapack, ' s'
     print*
     print*, '================================================================='  
     print*
@@ -157,5 +152,53 @@ contains
     deallocate(eigenvecs_lap, eigenvecs_dav, eigenvals_dav, eigenvals_lap)
 !    
   end subroutine testDavidson
+!
+!
+!
+subroutine testCholesky(n_row, n_col, mat, do_test)
+!    
+    implicit none
+    intrinsic                 :: selected_real_kind
+    integer,  parameter       :: wp = selected_real_kind(15)
+!
+    real(wp), intent(inout)      :: mat(:,:)
+    integer,  intent(in)      :: n_row, n_col
+    logical,  intent(in)      :: do_test
+    real(wp), allocatable     :: test(:,:)
+!
+if (do_test) then
+!      
+      allocate(test(3,3))
+      test(1,:)=(/ 25,  15,  -5 /)
+      test(2,:)=(/ 15,  18,   0 /)
+      test(3,:)=(/ -5,   0,  11 /)
+!
+      print *
+      print *, 'Cholesky Decomposition:' 
+      print *
+      print *, 'Input Matrix:'
+      print *
+      call printMatrix(test, 3, 3)
+      print *
+      print *, 'result Cholesky routine'
+      print *
+      call cholesky(3,3,test)
+    else
+!      
+      print *
+      print *, 'Cholesky Decomposition:' 
+      print *
+      print *, 'Input Matrix:'
+      print *
+      call printMatrix(mat, n_row, n_col)
+      print *
+      print *, 'result Cholesky routine'
+      print *
+      call cholesky(n_row, n_col, mat)
+    
+    end if 
+
+
+  end subroutine
 
 end program davidson

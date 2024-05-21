@@ -149,7 +149,8 @@ contains
 
       do i = 1, eigen_in
         if (verbose .ge. 2) then
-          print *, 'residual norm of eigenvector', i, ':', dnrm2(ndimA, residual(:,i), 1)
+          write(*,'(A, I2, A)', advance='no') 'residual norm of eigenvector', i, ':' 
+          write(*,'(E13.3)') dnrm2(ndimA, residual(:,i), 1)
         end if
         if(dnrm2(ndimA, residual(:,i), 1) .le. threshold_residual) then
           if (verbose .ge. 2) then
@@ -389,10 +390,10 @@ contains
     real(wp),   allocatable   :: L(:,:)
     integer                   :: i, k, j 
     real(wp)                  :: sum1, sum2
-
+!
     allocate(L(m,n))
     L = 0.d0
-  
+! 
     do i=1, n
       do k=1, i
         sum1 = 0.d0
@@ -416,11 +417,9 @@ contains
         end if
       end do
     end do
-
-  do i=1, m
-    print "(3(1X,F6.2))", L(i,:)
-  end do
-
+!
+  call printMatrix(L, m, n)
+!
   end subroutine cholesky
 !
 !
@@ -463,7 +462,13 @@ contains
     integer :: i,j 
 
     do i = 1, ncols
-      print *, (mat(i,j), j= 1, nrows )
+      do j = 1, nrows
+        write(*,'(F6.3)', advance='no') mat(i,j)
+        if (j .lt. nrows) then
+          write(*, '(A)', advance='no') ' '
+        end if
+      end do
+      print *
     end do
 
   end subroutine printMatrix
@@ -482,7 +487,8 @@ contains
     integer               :: i
 
     do i = 1, lenRow
-      print *, vec(i)
+      !print *, vec(i)
+      write(*,'(F6.3)') vec(i)
     end do
 
   end subroutine printVector
