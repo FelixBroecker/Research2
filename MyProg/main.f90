@@ -48,6 +48,8 @@ program davidson
 !
 ! program input
 !
+call asymMat() 
+stop
   write(*,*) 'Enter operation on Input Matrix. ( 1 = Davidson Eigensolver, 2 = Cholesky decomposition )'
   read(*,*) choice
 !  
@@ -69,6 +71,8 @@ program davidson
       end if
     end do
   end do
+
+
 !
 !  call cholesky decomposition or davidson
 !
@@ -234,6 +238,39 @@ if (do_test) then
       print*, '================================================================='  
       print*
     end if 
+
+
+  end subroutine
+
+
+  subroutine asymMat()
+    real(wp), allocatable     :: mat_A(:,:), diag(:,:), temp(:,:)
+    integer                   :: i, j, n_dim
+    real(wp)                  :: dgetri
+    
+    zero  = 0.d0
+    one   = 1.d0
+    n_dim = 6
+!    
+!  generate diagonal Matrix
+!
+    allocate (diag(n_dim, n_dim))
+    allocate (temp(n_dim, n_dim))
+    diag = zero
+    temp = zero
+    forall(i = 1:n_dim) diag(i, i) = real(2 + i, kind=wp)
+    print *, "Diagonal Matrix:"
+    call printMatrix(diag, n_dim, n_dim)
+    print *
+    call random_number(temp)
+    print *, "random matrix"
+    call printMatrix(temp, n_dim, n_dim)
+    print *
+!
+!   P = (T)^T * T
+!
+    call dgemm('t', 'n', ndim, ndim, ndim, one, temp, ndim, temp, ndim, zero, A, ndim )
+    !call dgetri()
 
 
   end subroutine
