@@ -48,9 +48,7 @@ program davidson
 !
 ! program input
 !
-call asymMat() 
-stop
-  write(*,*) 'Enter operation on Input Matrix. ( 1 = Davidson Eigensolver, 2 = Cholesky decomposition )'
+  write(*,*) 'Enter operation on Input Matrix. ( 1 = Davidson Eigensolver, 2 = Cholesky decomposition, 3 = LU decomposition)'
   read(*,*) choice
 !  
 !
@@ -82,6 +80,8 @@ stop
     call testDavidson(ndim, mat, eigen_in, threshold_residual, verbose, max_iter)
   else if (choice .eq. 2) then
     call testCholesky(ndim, ndim, mat, .false.)
+  else if (choice .eq. 3) then
+    call testLU(ndim, ndim, mat, .true.)
   else
     write(*,*) 'Invalide input.'
   end if
@@ -238,41 +238,80 @@ if (do_test) then
       print*, '================================================================='  
       print*
     end if 
-
-
-  end subroutine
-
-
-  subroutine asymMat()
-    real(wp), allocatable     :: mat_A(:,:), diag(:,:), temp(:,:)
-    integer                   :: i, j, n_dim
-    real(wp)                  :: dgetri
-    
-    zero  = 0.d0
-    one   = 1.d0
-    n_dim = 6
+  end subroutine testCholesky
+!
+!
+!
+subroutine testLU(n_row, n_col, mat, do_test)
 !    
-!  generate diagonal Matrix
+    implicit none
+    intrinsic                 :: selected_real_kind
+    integer,  parameter       :: wp = selected_real_kind(15)
 !
-    allocate (diag(n_dim, n_dim))
-    allocate (temp(n_dim, n_dim))
-    diag = zero
-    temp = zero
-    forall(i = 1:n_dim) diag(i, i) = real(2 + i, kind=wp)
-    print *, "Diagonal Matrix:"
-    call printMatrix(diag, n_dim, n_dim)
-    print *
-    call random_number(temp)
-    print *, "random matrix"
-    call printMatrix(temp, n_dim, n_dim)
-    print *
+    real(wp), intent(inout)   :: mat(:,:)
+    integer,  intent(in)      :: n_row, n_col
+    logical,  intent(in)      :: do_test
+    real(wp), allocatable     :: test(:,:), res_lapack(:,:), res_lu(:,:)
+    real(wp)                  :: start_lu, start_lapack, end_lu, end_lapack
+    integer                   :: info
 !
-!   P = (T)^T * T
+if (do_test) then
+!      
+      allocate(test(3,3))
+      test(1,:)=(/ 25,  15,  -5 /)
+      test(2,:)=(/ 15,  18,   0 /)
+      test(3,:)=(/ -5,   0,  11 /)
 !
-    call dgemm('t', 'n', ndim, ndim, ndim, one, temp, ndim, temp, ndim, zero, A, ndim )
-    !call dgetri()
+      print *
+      print *, 'LU Decomposition:' 
+      print *
+      call lu(3,3,test, 2)
+    else
+!      
 
-
-  end subroutine
-
+      allocate(res_lu(n_row, n_col), res_lapack(n_row, n_col))
+      print *
+      print *, 'LU Decomposition:' 
+      print *
+!
+      res_lu = mat
+      call cpu_time(start_lu)
+      call cholesky(n_row, n_col, res_lu, 0)
+      call cpu_time(end_lu)
+!      
+      print *
+      print *, '----------------------------------------------------------------'
+      print *, '                        Results LU'
+      print *, '----------------------------------------------------------------'
+!
+      print *
+      print *, 'lower triangular:'
+      print *
+      !call printMatrix(res_cholesky, n_row, n_col)
+!
+      res_lapack = mat
+      call cpu_time(start_lapack)
+      call dpotrf('l', ndim, res_lapack, ndim, info)
+      call cpu_time(end_lapack)
+!
+      print *
+      print *, '----------------------------------------------------------------'
+      print *, '                         Results Lapack'
+      print *, '----------------------------------------------------------------'
+      print *
+      print *, 'lower triangular:'
+      print *
+      !call printMatrix(res_lapack, n_row, n_col)
+!      
+      print*
+      print*, '================================================================='
+      print*
+      print '(A, E13.3, A)' , 'overall wall time Cholesky', end_LU - start_LU, ' s'
+      print '(A, E13.3, A)' , 'overall wall time Lapack  ', end_lapack - start_lapack, ' s'
+      print*
+      print*, '================================================================='  
+      print*
+    end if 
+  end subroutine testLU
+!
 end program davidson

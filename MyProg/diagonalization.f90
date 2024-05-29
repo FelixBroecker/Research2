@@ -427,6 +427,28 @@ contains
 !
 !
 !
+  subroutine lu(m, n, A, verbose)
+  intrinsic                 ::  selected_real_kind, sqrt
+  integer,  parameter       ::  wp = selected_real_kind(15)
+!
+!  takes matrix A with m rows and n columns
+!
+    integer,    intent(in)    :: m, n, verbose
+    real(wp),   intent(inout) :: A(:,:)
+!
+    real(wp),   allocatable   :: L(:,:)
+    integer                   :: i, k, j 
+    real(wp)                  :: sum1, sum2
+!
+    allocate(L(m,n))
+    L = 0.d0
+    print *, 'Challo'
+! 
+!
+  end subroutine lu
+!
+!
+!
   subroutine lapackDiag(mat, eigenvals, ndimMat)
 !
 ! get diagonalized matrix with lapack function
