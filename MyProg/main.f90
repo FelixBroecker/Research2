@@ -35,13 +35,13 @@ program davidson
 !
 !  
 !
-  ndim                  = 1000
+  ndim                  = 10
   zero                  = 0.0d0
 !
 !
 !  settings for davidson and call routine
 !
-  eigen_in              = 4
+  eigen_in              = 2
   verbose               = 1
   max_iter              = 100
   threshold_residual    = 1.d-7

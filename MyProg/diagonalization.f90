@@ -113,7 +113,6 @@ contains
       call dgemm('n', 'n', ndimA, n_grow, ndimA, 1.0d0, matA, ndimA, matV, ndimA, 0.0d0, matW, ndimA)
       call dgemm('t', 'n', ndimV, n_grow, ndimA, 1.0d0, matW, ndimA, matV, ndimA, 0.0d0, matP, ndimV)
 
-
 !
 !     diagonalize and obtain eigenvalues and eigenvectors 
 !
