@@ -251,21 +251,24 @@ subroutine testLU(n_row, n_col, mat, do_test)
     real(wp), intent(inout)   :: mat(:,:)
     integer,  intent(in)      :: n_row, n_col
     logical,  intent(in)      :: do_test
+!
     real(wp), allocatable     :: test(:,:), res_lapack(:,:), res_lu(:,:)
+    integer, allocatable      :: p(:)
     real(wp)                  :: start_lu, start_lapack, end_lu, end_lapack
     integer                   :: info
 !
 if (do_test) then
 !      
       allocate(test(3,3))
-      test(1,:)=(/ 25,  15,  -5 /)
-      test(2,:)=(/ 15,  18,   0 /)
-      test(3,:)=(/ -5,   0,  11 /)
+      allocate(p(3))
+      test(1,:)=(/ 1,  3,  5 /)
+      test(2,:)=(/ 2,  4,  7 /)
+      test(3,:)=(/ 1,  1,  0 /)
 !
       print *
       print *, 'LU Decomposition:' 
       print *
-      call lu(3,3,test, 2)
+      call lu(3,3,test,p,2)
     else
 !      
 

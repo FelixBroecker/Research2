@@ -426,20 +426,22 @@ contains
 !
 !
 !
-  subroutine lu(m, n, A, verbose)
+  subroutine lu(m, n, A, p, verbose)
   intrinsic                 ::  selected_real_kind, sqrt
   integer,  parameter       ::  wp = selected_real_kind(15)
 !
 !  takes matrix A with m rows and n columns
 !
     integer,    intent(in)    :: m, n, verbose
-    real(wp),   intent(inout) :: A(:,:)
+    real(wp),   intent(inout) :: a(:,:)
+    integer,    intent(out)   :: p(:)
 !
-    real(wp),   allocatable   :: L(:,:)
+    real(wp),   allocatable   :: l(:,:)
     integer                   :: i, k, j 
     real(wp)                  :: sum1, sum2
 !
     allocate(L(m,n))
+    p = (/ (i, i=1,3) /)
     L = 0.d0
     print *, 'Challo'
 ! 
